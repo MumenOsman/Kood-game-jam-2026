@@ -55,16 +55,31 @@ Kood-game-jam-2026/
 ## 3. Core Mechanics & Technical Specifications
 
 ### 3.1. Locomotion & Platforming (`PlayerMovement.js`)
-- Walk Speed: 190 px/s
-- Run Speed: 330 px/s (hold Shift)
+- Walk Speed: 190 px/s (Nominal), 110 px/s (Emergency Crawl when depleted)
+- Run Speed: 330 px/s (hold Shift; disabled during Low Power < 25% or Depleted)
 - Ground Acceleration: 1800 px/s^2
 - Air Acceleration: 1200 px/s^2
 - Ground Friction: 0.82
 - Gravity: 1400 px/s^2, Terminal Velocity: 850 px/s
-- Normal Jump: -520 px/s, with 120ms coyote time and 120ms jump buffering
+- Normal Jump: -520 px/s (Nominal), -470 px/s (Low Power), -280 px/s (Emergency Hop when depleted)
+- Coyote Time: 120ms, Jump Buffering: 120ms
 - Mid-Air Tether Jump: When airborne and connected to a wire, pressing Space unplugs the wire and imparts an upward (-460 px/s) and horizontal (+/- 280 px/s) leap towards the player's facing/steering direction.
 - Idle Rest & Docking: After 3.5 seconds stationary on the ground, or immediately when pressing S while grounded, the robot enters the rest state.
-- Charging: When plugged into a CHARGER socket and holding S, the battery recharges at +25/s up to 100 max.
+- Energy Budget & Subtle Depletion:
+  - Max Battery: 100.0%
+  - Walking Drain: 0.5% / sec
+  - Running Drain: 1.2% / sec
+  - Ground Jump Cost: 1.5% per jump
+  - Tether Jump Cost: 2.0% per jump
+  - Circuit Dial Rotation Cost: 3.0% per 90 deg turn
+  - Idle / Wire Aiming: 0.0% (free of charge)
+  - Wall CHARGER Socket: Recharges rapidly at +30.0% / sec up to 100.0%
+  - Emergency Rest Trickle: Recharges at +1.0% / sec while resting on the ground up to a 20.0% safety threshold
+- Energy States:
+  - Nominal (> 50%): Full speed and mobility, green HUD bar.
+  - Moderate (25% - 50%): Full mobility, warm amber HUD bar.
+  - Low Power (1% - 25%): Red pulsing HUD bar, sprinting disabled, jump force slightly softened.
+  - Depleted (0%): Emergency crawl mode (110 px/s), small hops (-280 px/s), can sit to trickle back up to 20% or plug into charger. Zero punishment or resets.
 
 ### 3.2. Wire & Tether Dynamics (`WireSystem.js`)
 - Max Wire Length: 280 px
@@ -158,4 +173,5 @@ Based on `Initial files/Initial-level-game-mechanics-test.png`:
 - 2026-11-03: Removed all icons, emojis, and non-ASCII decorative characters across all project files.
 - 2026-11-03: Created SOURCE_OF_TRUTH.md as persistent project state documentation.
 - 2026-11-03: Implemented cardinal port array model [Top, Right, Bottom, Left] and 3 distinct junction dial designs (Straight I-Pipe, Corner L-Bend, Splitter T-Junction). Added metallic blue dial housing, internal channel borders, and animated amber/orange electrical plasma currents. Updated TestRoom to feature a multi-node puzzle with elevated access platforms and blast door activation.
+- 2026-11-03: Implemented subtle battery power depletion system (walking 0.5%/s, running 1.2%/s, jumps 1.5%, tether jumps 2.0%, dial rotation 3.0%). Added Low Power Mode (< 25%), Emergency Crawl Mode (0%), emergency rest trickle recharge (+1%/s up to 20%), trailing ghost depletion bar in HUD, and cleaned conduit termination at dial housing rims.
 
