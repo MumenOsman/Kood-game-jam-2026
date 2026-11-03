@@ -75,7 +75,12 @@ export class PlayerMovement {
             p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
         }
 
-        if (this.input.jumpPressed) {
+        // Jump buffer from Space, or S when attached to wall / wall coyote
+        const isWallJumpCandidate = (p.isWallSliding || p.wallCoyoteTimer > 0) && !p.isGrounded && !p.isTethered;
+        const downPressed = Boolean(this.input.downPressed || (this.input.isKeyPressed && (this.input.isKeyPressed('KeyS') || this.input.isKeyPressed('ArrowDown'))));
+        const wallJumpInput = isWallJumpCandidate && downPressed;
+
+        if (this.input.jumpPressed || wallJumpInput) {
             p.jumpBufferTimer = this.JUMP_BUFFER_TIME;
         } else {
             p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
@@ -97,7 +102,7 @@ export class PlayerMovement {
 
         // 3. Wall Slide & Wall Jump Handling
         p.isWallSliding = false;
-        if (!p.isGrounded && !p.isTethered && p.shockInvulnTimer <= 0 && p.vy > -50) {
+        if (!p.isGrounded && !p.isTethered && p.shockInvulnTimer <= 0 && p.wallJumpLockTimer <= 0 && p.vy > -80) {
             const wallRunners = this.level ? this.level.getWallRunColliders() : [];
             for (const col of wallRunners) {
                 if (col.isElectrified) continue; // Cannot wall-slide on electrified surface
@@ -107,25 +112,33 @@ export class PlayerMovement {
 
                 const face = col.wallRunFace || 'both';
 
-                // Touching right face of collider (player is to the right of col, holding A to slide)
+                // Right face of collider (wall is to player's left: player is at col.x + col.width)
+                // Automatically sticks without needing A or D
                 const canTouchRightFace = (face === 'right' || face === 'both');
-                const touchingRightFace = canTouchRightFace && this.input.moveLeft && Math.abs(p.x - (col.x + col.width)) < 10;
+                const touchingRightFace = canTouchRightFace && Math.abs(p.x - (col.x + col.width)) <= 10;
 
-                // Touching left face of collider (player is to the left of col, holding D to slide)
+                // Left face of collider (wall is to player's right: player is at col.x - player.width)
+                // Automatically sticks without needing A or D
                 const canTouchLeftFace = (face === 'left' || face === 'both');
-                const touchingLeftFace = canTouchLeftFace && this.input.moveRight && Math.abs((p.x + p.width) - col.x) < 10;
+                const touchingLeftFace = canTouchLeftFace && Math.abs((p.x + p.width) - col.x) <= 10;
 
                 if (touchingRightFace) {
                     p.isWallSliding = true;
                     p.wallSlideDirection = -1; // Wall is to the player's left
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
                     p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    p.vx = 0;
+                    p.x = col.x + col.width;
+                    p.facing = -1;
                     break;
                 } else if (touchingLeftFace) {
                     p.isWallSliding = true;
                     p.wallSlideDirection = 1; // Wall is to the player's right
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
                     p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    p.vx = 0;
+                    p.x = col.x - p.width;
+                    p.facing = 1;
                     break;
                 }
             }
@@ -144,7 +157,7 @@ export class PlayerMovement {
 
         // 4. Resting / Docking & Idle State
         let horizontalIntent = 0;
-        if (p.wallJumpLockTimer <= 0) {
+        if (p.wallJumpLockTimer <= 0 && !p.isWallSliding) {
             if (this.input.moveLeft) horizontalIntent -= 1;
             if (this.input.moveRight) horizontalIntent += 1;
         }

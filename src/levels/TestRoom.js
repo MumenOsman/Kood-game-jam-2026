@@ -101,7 +101,7 @@ export class TestRoom extends Level {
         // Shaft Left Wall: Electrified by default, de-electrified via circuit cutoff dial
         this.addHazardObject({
             x: 4150,
-            y: 140,
+            y: 50,
             width: 30,
             height: 440,
             isWallRunnable: true,

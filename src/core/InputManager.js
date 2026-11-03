@@ -154,6 +154,10 @@ export class InputManager {
         return this.isKeyPressed('Space');
     }
 
+    get downPressed() {
+        return this.isKeyPressed('KeyS') || this.isKeyPressed('ArrowDown');
+    }
+
     get interactPressed() {
         return this.isKeyPressed('KeyE');
     }
