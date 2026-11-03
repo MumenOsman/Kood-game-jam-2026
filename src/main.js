@@ -77,7 +77,38 @@ async function bootstrap() {
         hud.setMessage('Tether jump executed!');
     });
 
-    // 6. Composite Game Loop System
+    // 6. DevTools / Debug System (Development & Localhost Only - Never loaded in production)
+    const IS_DEV = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.search.includes('debug=true')
+    );
+
+    let devTools = null;
+    if (IS_DEV) {
+        try {
+            const { DevTools } = await import('./debug/DevTools.js');
+            devTools = new DevTools({
+                engine,
+                eventBus,
+                input,
+                player,
+                camera,
+                movement,
+                wireSystem,
+                circuitSystem,
+                hazardSystem,
+                level,
+                hud,
+                canvas
+            });
+            devTools.init();
+        } catch (err) {
+            console.warn('[DevTools] Could not load debug module:', err);
+        }
+    }
+
+    // 7. Composite Game Loop System
     const gameMaster = {
         name: 'GameMaster',
         init(eng) {
@@ -122,6 +153,11 @@ async function bootstrap() {
             // HUD
             hud.update(dt);
 
+            // DevTools update
+            if (devTools) {
+                devTools.update(dt);
+            }
+
             // End-of-frame input reset
             input.postUpdate();
         },
@@ -136,10 +172,20 @@ async function bootstrap() {
             wireSystem.render(ctx);
             animation.render(ctx, player);
 
+            // DevTools world-space gizmos
+            if (devTools) {
+                devTools.renderWorld(ctx);
+            }
+
             camera.restoreTransform(ctx);
 
             // Screen Space HUD Rendering
             hud.render(ctx);
+
+            // DevTools screen-space telemetry overlay
+            if (devTools) {
+                devTools.renderScreen(ctx);
+            }
         }
     };
 
