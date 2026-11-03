@@ -39,9 +39,10 @@ Kood-game-jam-2026/
     |   |-- Player.js                          # Robot entity state, transform, battery, head socket
     |   `-- Socket.js                          # Sockets: ANCHOR, CIRCUIT, CHARGER
     |-- modules/
-    |   |-- PlayerMovement.js                  # Platformer kinematics, friction, jump, tether jump
+    |   |-- PlayerMovement.js                  # Platformer kinematics, friction, jump, tether jump, wall slide/jump
     |   |-- WireSystem.js                      # Trajectory arc, projectile throw, mid-air pendulum physics
     |   |-- CircuitSystem.js                   # Bitmask directional ports, BFS power propagation, rotation
+    |   |-- HazardSystem.js                    # Electrified objects, hazards, shock triggers, and arc rendering
     |   `-- AnimationController.js             # Sprite playback and procedural fallback renderer
     |-- levels/
     |   |-- Level.js                           # Base level interface
@@ -111,7 +112,37 @@ Kood-game-jam-2026/
   - Inner channel fill: dark charcoal (`#0d131a`) when unpowered.
   - Animated electrical plasma current: flowing amber/orange wave (`#ff9900` glow with `#fff099` core) traveling along active channels when powered.
   - Center wire plug socket: integrated metallic blue socket at (0, 0) of dial, illuminating amber when tethered.
-- Device Triggering: When power reaches a RECEIVER node, emits `ACTIVATE_DEVICE`, opening blast doors or moving platforms.
+- Device Triggering: When power reaches a RECEIVER node, emits `ACTIVATE_DEVICE`, opening blast doors or moving platforms. When power is severed, emits `DEACTIVATE_DEVICE`.
+
+### 3.4. Wall Run & Wall Jump Mechanics (`PlayerMovement.js` & `Level.js`)
+- Modular Wall Definition: Any collider registered in any level with `isWallRunnable: true` acts as a wall-runnable surface. Supports `wallRunFace: 'left' | 'right' | 'both'` (default: `'both'`).
+- Wall Slide Velocity: Clamped descent speed to 110 px/s when moving towards the wall while airborne (`vy > -50 px/s`).
+- Wall Coyote Time: 120ms buffer allowing wall jump immediately after sliding off or detaching from the wall.
+- Wall Kick Impulse:
+  - Vertical: -490 px/s (snappy upward leap)
+  - Horizontal: 340 px/s directed away from the wall (outward kick)
+- Directional Lock: 150ms input lock during wall kick to prevent immediate counter-steering and preserve parabolic leap arc.
+- Electrification Check: If a wall is electrified (`isElectrified: true`), wall sliding is blocked and player contact triggers a high-voltage shock instead.
+- Visual Cue: `Level.renderWallRunGripStrips(ctx)` renders cyan tactile friction runner grooves along runnable wall faces.
+
+### 3.5. Modular Electrified Hazards & Objects (`HazardSystem.js` & `Level.js`)
+- Modular Hazard Architecture: Managed by `HazardSystem`, completely decoupled from specific room geometry. Any collider in any level with `isElectrified: true` acts as an active hazard.
+- Directional Faces Supported:
+  - `'right'`: Electric field along right edge; knockback repels player rightward (+360 px/s).
+  - `'left'`: Electric field along left edge; knockback repels player leftward (-360 px/s).
+  - `'top'`: Electric field along top edge (floors/rails); knockback blasts player upward (-380 px/s).
+  - `'bottom'`: Electric field along bottom edge (ceilings); knockback blasts player downward (+300 px/s).
+  - `'all'`: Electric field around entire perimeter; knockback repels omnidirectionally away from center.
+- Shock Mechanics:
+  - Battery Drain: Configurable `shockDamage` (default -8.0% battery power).
+  - Knockback: Configurable `knockbackForce` (default 360 px/s).
+  - Invulnerability Window: 450ms invulnerability timer during which the player sprite flickers at 45Hz.
+  - Zero Violent Death: Consistent with pacifist rules, shock drains power and knocks back; depleted battery enters emergency crawl mode.
+- Circuit & Device Integration:
+  - Listens to `ACTIVATE_DEVICE(deviceId)`: Sets matching colliders to `isElectrified: true`, bursting sparks.
+  - Listens to `DEACTIVATE_DEVICE(deviceId)`: Sets matching colliders to `isElectrified: false`, bursting safe cyan sparks.
+  - Listens to `TOGGLE_DEVICE(deviceId)`: Inverts electrification state.
+- Visual Effects: High-voltage animated double-phase lightning arcs (magenta `#ff4081` outer, cyan `#00e5ff` secondary, white core) with pulsating red hazard warning LEDs when active, and calm green LEDs when de-electrified.
 
 ---
 
@@ -125,18 +156,21 @@ Kood-game-jam-2026/
 | `REQUEST_WIRE_DETACH` | `null` | `PlayerMovement` | `WireSystem` |
 | `PLAYER_JUMP` | `{ x, y }` | `PlayerMovement` | Sound / FX |
 | `PLAYER_TETHER_JUMP` | `{ x, y, dir }` | `PlayerMovement` | `HUD`, FX |
+| `PLAYER_WALL_JUMP` | `{ x, y, dir }` | `PlayerMovement` | `HUD`, AnimationController, FX |
+| `PLAYER_SHOCKED` | `{ damage, knockbackX, knockbackY, deviceId }` | `HazardSystem` | `PlayerMovement`, `HUD`, FX |
 | `PLAYER_REST_START` | `null` | `PlayerMovement` | `AnimationController` |
 | `PLAYER_REST_END` | `null` | `PlayerMovement` | `AnimationController` |
 | `BATTERY_CHANGED` | `batteryLevel` | `PlayerMovement` | `HUD` |
 | `CIRCUIT_UPDATED` | `{ nodeId, ports }` | `CircuitSystem` | `HUD`, Level |
-| `ACTIVATE_DEVICE` | `deviceId` | `CircuitSystem` | `TestRoom` (Door, etc.) |
-| `DEACTIVATE_DEVICE` | `deviceId` | `CircuitSystem` | `TestRoom` |
+| `ACTIVATE_DEVICE` | `deviceId` | `CircuitSystem` | `TestRoom`, `HazardSystem` |
+| `DEACTIVATE_DEVICE` | `deviceId` | `CircuitSystem` | `TestRoom`, `HazardSystem` |
+| `TOGGLE_DEVICE` | `deviceId` | CircuitSystem / Level | `HazardSystem` |
 
 ---
 
 ## 5. Level Specification: Test Room (`TestRoom.js`)
 
-Based on `Initial files/Initial-level-game-mechanics-test.png`:
+Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_1793727603625_21c05ec9.png`:
 - Zone 1 (Spawn Chamber): x = 40 to 860. Tutorial prompts for walk, run, dock/rest. Storage boxes to jump onto.
 - Zone 2 (Jump Gap): Gap from x = 860 to 1060 (width 200 px).
 - Zone 3 (Swing Chasm): Gap from x = 1340 to 1860 (width 520 px). Ceiling anchor socket at (1600, 150).
@@ -147,6 +181,14 @@ Based on `Initial files/Initial-level-game-mechanics-test.png`:
   - Dial 2: Corner Node (L-Bend) at (3050, 240) with elevated catwalk at (2980, 440).
   - Dial 3: Straight Node (I-Pipe) at (3280, 420).
 - Zone 6 (Exit Blast Door): Blast Door receiver at (3480, 420), height 180 px. Opens upward with hydraulic animation when power routes from Nuclear source through all three dials.
+- Zone 7 (Chamber 02 & Vertical Chimney Shaft): x = 3508 to 5100.
+  - Chamber 02 floor from x = 3508 to 4340.
+  - Substation Power Source at (3820, 380) routing power right to Dial 4.
+  - Dial 4 (Wall Cutoff Dial): Straight I-Pipe at (4020, 380), initially horizontal `[false, true, false, true]`, delivering power to the shaft left wall. Rotating 90 degrees cuts power to the wall.
+  - Shaft Left Wall: Collider at x = 4150, y = 140, width = 30, height = 440 (`deviceId: 'shaft_left_wall'`). Initially electrified on right face. When de-electrified via Dial 4, becomes wall-runnable (`wallRunFace: 'right'`).
+  - Shaft Right Wall: Collider at x = 4340, y = 260, width = 30, height = 320 (`isWallRunnable: true`, `wallRunFace: 'left'`).
+  - Chimney Shaft Width: 160 px between walls (x = 4180 to 4340), perfectly sized for wall jumping up.
+  - Upper Floor Platform: Extends from top of right wall (x = 4340 to 5040, y = 260) into upper facility area.
 
 ---
 
@@ -156,7 +198,7 @@ Based on `Initial files/Initial-level-game-mechanics-test.png`:
 |---|---|
 | A / D | Walk Left / Right |
 | Shift + A / D | Run Left / Right |
-| Space | Jump from ground / Mid-air Tether Jump |
+| Space | Jump from ground / Mid-air Tether Jump / Wall Jump |
 | S | Dock / Rest (hold near charger to recharge battery) |
 | Hold LMB | Aim and spin head plug, previewing parabolic trajectory arc |
 | Release LMB | Launch plug projectile along arc |
@@ -174,4 +216,6 @@ Based on `Initial files/Initial-level-game-mechanics-test.png`:
 - 2026-11-03: Created SOURCE_OF_TRUTH.md as persistent project state documentation.
 - 2026-11-03: Implemented cardinal port array model [Top, Right, Bottom, Left] and 3 distinct junction dial designs (Straight I-Pipe, Corner L-Bend, Splitter T-Junction). Added metallic blue dial housing, internal channel borders, and animated amber/orange electrical plasma currents. Updated TestRoom to feature a multi-node puzzle with elevated access platforms and blast door activation.
 - 2026-11-03: Implemented subtle battery power depletion system (walking 0.5%/s, running 1.2%/s, jumps 1.5%, tether jumps 2.0%, dial rotation 3.0%). Added Low Power Mode (< 25%), Emergency Crawl Mode (0%), emergency rest trickle recharge (+1%/s up to 20%), trailing ghost depletion bar in HUD, and cleaned conduit termination at dial housing rims.
+- 2026-11-03: Implemented modular Wall Run and Wall Jump mechanics (clamped slide speed 110 px/s, coyote timer, wall kick impulse 340 px/s outward and -490 px/s upward with directional lock). Implemented modular HazardSystem managing electrified colliders of any orientation (left, right, top, bottom, all), directional knockback, -8% battery shock drain, and high-voltage double-phase lightning arc rendering. Extended TestRoom with Chamber 02, vertical chimney shaft (160 px wide), substation power line, cutoff dial, and upper floor platform. Added Level.js helper methods (addWallRunWall, addHazardObject, renderWallRunGripStrips) for seamless level extensibility.
+
 
