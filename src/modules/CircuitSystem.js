@@ -185,6 +185,12 @@ export class CircuitSystem {
         node.ports = newPorts;
         node.targetRotationAngle += Math.PI / 2;
 
+        // Deduct rotation torque energy cost from player
+        if (this.player && typeof this.player.drainBattery === 'function') {
+            this.player.drainBattery(3.0);
+            this.eventBus.emit('BATTERY_CHANGED', this.player.battery);
+        }
+
         // Spawn rotation electrical sparks along metallic dial rim
         this._spawnDialSparks(node, 10);
 

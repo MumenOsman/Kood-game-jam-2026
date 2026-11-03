@@ -16,7 +16,7 @@ export class AnimationController {
             idle: 6,
             walk: 10,
             run: 14,
-            jump: 8,
+            jump: 10,
             rest: 5,
             throw_ground: 12,
             throw_windup: 12,

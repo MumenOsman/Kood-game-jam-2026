@@ -210,15 +210,15 @@ export class TestRoom extends Level {
             ]
         });
 
-        // Visual Background Conduits
+        // Visual Background Conduits (terminated cleanly at dial outer rims radius 34px)
         // Generator -> Splitter
         this.circuitSystem.addConduit({
             id: 'c_gen_splitter',
             fromNodeId: 'nuclear_gen',
             toNodeId: 'junction_splitter',
             points: [
-                { x: 2550, y: 240 },
-                { x: 2750, y: 240 }
+                { x: 2550 + 34, y: 240 },
+                { x: 2750 - 34, y: 240 }
             ]
         });
 
@@ -228,31 +228,31 @@ export class TestRoom extends Level {
             fromNodeId: 'junction_splitter',
             toNodeId: 'junction_corner',
             points: [
-                { x: 2750, y: 240 },
-                { x: 3050, y: 240 }
+                { x: 2750 + 34, y: 240 },
+                { x: 3050 - 34, y: 240 }
             ]
         });
 
-        // Corner -> Straight (routes down and then right)
+        // Corner -> Straight (routes down from corner bottom rim and connects to straight left rim)
         this.circuitSystem.addConduit({
             id: 'c_corner_straight',
             fromNodeId: 'junction_corner',
             toNodeId: 'junction_straight',
             points: [
-                { x: 3050, y: 240 },
+                { x: 3050, y: 240 + 34 },
                 { x: 3050, y: 420 },
-                { x: 3280, y: 420 }
+                { x: 3280 - 34, y: 420 }
             ]
         });
 
-        // Straight -> Door Receiver
+        // Straight -> Door Receiver (routes from straight right rim to door frame)
         this.circuitSystem.addConduit({
             id: 'c_straight_door',
             fromNodeId: 'junction_straight',
             toNodeId: 'door_receiver',
             points: [
-                { x: 3280, y: 420 },
-                { x: 3480, y: 420 }
+                { x: 3280 + 34, y: 420 },
+                { x: 3480 - 10, y: 420 }
             ]
         });
     }

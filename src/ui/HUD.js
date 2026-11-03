@@ -9,6 +9,11 @@ export class HUD {
         this.camera = camera;
         this.statusMessage = 'System Online. Explore and restore power.';
         this.statusTimer = 5;
+
+        // Trailing depletion ghost bar
+        this.ghostBattery = player.battery;
+        this.pulsePhase = 0;
+        this.lowPowerWarned = false;
     }
 
     setMessage(msg, duration = 4) {
@@ -17,8 +22,25 @@ export class HUD {
     }
 
     update(dt) {
+        this.pulsePhase += dt * 5;
+
         if (this.statusTimer > 0) {
             this.statusTimer -= dt;
+        }
+
+        // Smoothly interpolate ghost battery towards current battery
+        if (this.ghostBattery > this.player.battery) {
+            this.ghostBattery = Math.max(this.player.battery, this.ghostBattery - dt * 18);
+        } else {
+            this.ghostBattery = this.player.battery;
+        }
+
+        // Trigger alert banner on low power
+        if (this.player.isLowPower && !this.lowPowerWarned) {
+            this.lowPowerWarned = true;
+            this.setMessage('LOW POWER WARNING: Sprinting offline. Rest or recharge.', 4);
+        } else if (!this.player.isLowPower && !this.player.isDepleted) {
+            this.lowPowerWarned = false;
         }
     }
 
@@ -49,12 +71,16 @@ export class HUD {
         // Background box
         ctx.fillStyle = 'rgba(18, 22, 28, 0.85)';
         ctx.fillRect(x - 8, y - 8, width + 55, height + 16);
-        ctx.strokeStyle = '#2f3846';
+        ctx.strokeStyle = p.isDepleted
+            ? '#ff3344'
+            : p.isLowPower
+            ? '#ffaa00'
+            : '#2f3846';
         ctx.lineWidth = 1.5;
         ctx.strokeRect(x - 8, y - 8, width + 55, height + 16);
 
         // Battery label
-        ctx.fillStyle = '#b0bec5';
+        ctx.fillStyle = p.isLowPower ? '#ffaa00' : '#b0bec5';
         ctx.font = 'bold 11px monospace';
         ctx.fillText('POWER', x, y - 1);
 
@@ -62,15 +88,26 @@ export class HUD {
         ctx.fillStyle = '#10141a';
         ctx.fillRect(x, y + 4, width, height - 4);
 
+        // Trailing depletion ghost bar (soft light-red/white)
+        const ghostPct = Math.max(0, Math.min(1, this.ghostBattery / p.maxBattery));
+        if (this.ghostBattery > p.battery) {
+            ctx.fillStyle = 'rgba(255, 120, 120, 0.45)';
+            ctx.fillRect(x + 1, y + 5, (width - 2) * ghostPct, height - 6);
+        }
+
         // Fill percentage
         const pct = Math.max(0, Math.min(1, p.battery / p.maxBattery));
-        const fillColor = p.isCharging
-            ? '#00ffcc'
-            : pct < 0.25
-            ? '#ff3b30'
-            : pct < 0.55
-            ? '#ffcc00'
-            : '#00e676';
+        let fillColor = '#00e676'; // Nominal green
+        if (p.isCharging) {
+            fillColor = '#00ffcc';
+        } else if (p.isDepleted) {
+            fillColor = '#ff2233';
+        } else if (p.isLowPower) {
+            const pulse = (Math.sin(this.pulsePhase) + 1) / 2;
+            fillColor = pulse > 0.5 ? '#ff3b30' : '#ff8800';
+        } else if (pct < 0.55) {
+            fillColor = '#ffcc00';
+        }
 
         ctx.fillStyle = fillColor;
         ctx.fillRect(x + 1, y + 5, (width - 2) * pct, height - 6);
@@ -83,7 +120,15 @@ export class HUD {
         if (p.isCharging) {
             ctx.fillStyle = '#00ffcc';
             ctx.font = '9px monospace';
-            ctx.fillText('CHARGING', x + 58, y - 1);
+            ctx.fillText('CHARGING', x + 50, y - 1);
+        } else if (p.isDepleted) {
+            ctx.fillStyle = '#ff3344';
+            ctx.font = '9px monospace';
+            ctx.fillText('DEPLETED', x + 50, y - 1);
+        } else if (p.isLowPower) {
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = '9px monospace';
+            ctx.fillText('LOW', x + 50, y - 1);
         }
     }
 

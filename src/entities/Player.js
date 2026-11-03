@@ -35,7 +35,7 @@ export class Player {
         this.spinAngle = 0; // for plug spinning animation
 
         // Rest and battery states
-        this.battery = 75; // 0 to 100
+        this.battery = 100; // 0 to 100
         this.maxBattery = 100;
         this.isCharging = false;
         this.isResting = false;
@@ -43,6 +43,28 @@ export class Player {
 
         // High-level visual animation state
         this.currentState = 'idle'; // idle, walk, run, jump, rest, throw_ground, throw_air
+    }
+
+    drainBattery(amount) {
+        if (this.battery <= 0) return 0;
+        const prev = this.battery;
+        this.battery = Math.max(0, this.battery - amount);
+        return prev - this.battery;
+    }
+
+    addBattery(amount) {
+        if (this.battery >= this.maxBattery) return 0;
+        const prev = this.battery;
+        this.battery = Math.min(this.maxBattery, this.battery + amount);
+        return this.battery - prev;
+    }
+
+    get isLowPower() {
+        return this.battery <= 25 && this.battery > 0;
+    }
+
+    get isDepleted() {
+        return this.battery <= 0;
     }
 
     /**
