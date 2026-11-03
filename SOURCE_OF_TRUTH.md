@@ -79,14 +79,24 @@ Kood-game-jam-2026/
 - Visuals: Catenary/Bezier curve sag when slack, straight glowing line under tension with animated electrical pulses.
 
 ### 3.3. Circuit System & Grid Logic (`CircuitSystem.js`)
-- Direction Bitmasks:
-  - NORTH = 1 (0001)
-  - EAST  = 2 (0010)
-  - SOUTH = 4 (0100)
-  - WEST  = 8 (1000)
-- Rotation: Pressing E while tethered to a CIRCUIT socket rotates its ports 90 degrees clockwise via bit-shifting.
-- Power Propagation: Breadth-First Search (BFS) starting from all active SOURCE nodes.
-- Device Triggering: When power reaches a RECEIVER node, emits `ACTIVATE_DEVICE`, opening doors or powering lifts.
+- Cardinal Port Architecture: Defined as a 4-element boolean array `[Top, Right, Bottom, Left]`:
+  - `PORT.TOP = 0`
+  - `PORT.RIGHT = 1`
+  - `PORT.BOTTOM = 2`
+  - `PORT.LEFT = 3`
+- Node Designs (3 Distinct Types):
+  1. Straight Node (I-Pipe): 2 opposite ports active (`[false, true, false, true]` horizontal or `[true, false, true, false]` vertical), routing power straight across.
+  2. Corner Node (L-Bend): 2 adjacent ports active (`[true, false, false, true]`, `[true, true, false, false]`, etc.), routing power at 90 degrees.
+  3. Splitter Node (T-Junction): 3 ports active (`[false, true, true, true]`, `[true, true, false, true]`, etc.), splitting incoming power into two outgoing directions.
+- Rotation Mechanism: Pressing E while tethered to a CIRCUIT socket shifts the active port array by 1 index clockwise (`[Left, Top, Right, Bottom]`), smoothly animates dial rotation by 90 degrees, spawns electrical sparks along the dial rim, and emits `EventBus.emit('CIRCUIT_UPDATED')`.
+- Power Propagation (BFS): Power is traced from SOURCE nodes through background conduits. Power only flows between adjacent nodes if their touching ports are both active.
+- Visual Representation:
+  - Circular wall dials (radius 34 px) with double concentric metallic blue housing (`#204a6e` outer, `#4da6ff` inner).
+  - Internal conduit channels with metallic blue borders (`#3ca0ff`, 2.2 px).
+  - Inner channel fill: dark charcoal (`#0d131a`) when unpowered.
+  - Animated electrical plasma current: flowing amber/orange wave (`#ff9900` glow with `#fff099` core) traveling along active channels when powered.
+  - Center wire plug socket: integrated metallic blue socket at (0, 0) of dial, illuminating amber when tethered.
+- Device Triggering: When power reaches a RECEIVER node, emits `ACTIVATE_DEVICE`, opening blast doors or moving platforms.
 
 ---
 
@@ -111,13 +121,17 @@ Kood-game-jam-2026/
 
 ## 5. Level Specification: Test Room (`TestRoom.js`)
 
-Based directly on `Initial files/Initial-level-game-mechanics-test.png`:
+Based on `Initial files/Initial-level-game-mechanics-test.png`:
 - Zone 1 (Spawn Chamber): x = 40 to 860. Tutorial prompts for walk, run, dock/rest. Storage boxes to jump onto.
 - Zone 2 (Jump Gap): Gap from x = 860 to 1060 (width 200 px).
 - Zone 3 (Swing Chasm): Gap from x = 1340 to 1860 (width 520 px). Ceiling anchor socket at (1600, 150).
 - Zone 4 (Charger Alcove): Platform x = 1860 to 2400. Wall socket at (2150, 460) of type CHARGER.
-- Zone 5 (Circuit Puzzle): Platform x = 2400 to 3620. Overhead Nuclear Power source at (2750, 110). Ceiling rotatable junction at (3100, 110) with attached socket at (3100, 170).
-- Zone 6 (Exit Blast Door): Door at x = 3480, height 180 px. Opens upward with hydraulic animation when junction routes power from Nuclear source.
+- Zone 5 (Circuit Puzzle Corridor): Platform x = 2400 to 3620.
+  - Nuclear Generator Source at (2550, 240).
+  - Dial 1: Splitter Node (T-Junction) at (2750, 240) with elevated box at (2710, 480).
+  - Dial 2: Corner Node (L-Bend) at (3050, 240) with elevated catwalk at (2980, 440).
+  - Dial 3: Straight Node (I-Pipe) at (3280, 420).
+- Zone 6 (Exit Blast Door): Blast Door receiver at (3480, 420), height 180 px. Opens upward with hydraulic animation when power routes from Nuclear source through all three dials.
 
 ---
 
@@ -142,4 +156,6 @@ Based directly on `Initial files/Initial-level-game-mechanics-test.png`:
 - 2026-11-03: Initial build of modular core platformer engine, decoupled EventBus, fixed-timestep 60Hz loop, WireSystem with pendulum physics and aiming arc, CircuitSystem with bitmask power routing and BFS, TestRoom matching sketch layout, HUD, and Hero sprite integration.
 - 2026-11-03: Updated mid-air tether mechanics: RMB cleanly cuts wire without jump boost; Space mid-air performs tether jump in facing direction.
 - 2026-11-03: Removed all icons, emojis, and non-ASCII decorative characters across all project files.
-- 2026-11-03: Created SOURCE_OF_TRUTH.md as the persistent project state documentation.
+- 2026-11-03: Created SOURCE_OF_TRUTH.md as persistent project state documentation.
+- 2026-11-03: Implemented cardinal port array model [Top, Right, Bottom, Left] and 3 distinct junction dial designs (Straight I-Pipe, Corner L-Bend, Splitter T-Junction). Added metallic blue dial housing, internal channel borders, and animated amber/orange electrical plasma currents. Updated TestRoom to feature a multi-node puzzle with elevated access platforms and blast door activation.
+
