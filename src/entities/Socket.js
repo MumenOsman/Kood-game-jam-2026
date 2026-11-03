@@ -33,12 +33,13 @@ export class Socket {
         // Highlight ring when player is in range
         if (this.isHighlighted) {
             const pulse = 1 + Math.sin(this.pulsePhase) * 0.15;
+            const highlightRadius = this.type === 'CIRCUIT' ? 44 : (this.radius + 10);
             ctx.beginPath();
-            ctx.arc(0, 0, (this.radius + 10) * pulse, 0, Math.PI * 2);
+            ctx.arc(0, 0, highlightRadius * pulse, 0, Math.PI * 2);
             ctx.fillStyle = this.type === 'CHARGER'
                 ? 'rgba(0, 255, 170, 0.2)'
                 : this.type === 'CIRCUIT'
-                ? 'rgba(255, 190, 0, 0.2)'
+                ? 'rgba(77, 166, 255, 0.22)'
                 : 'rgba(0, 220, 255, 0.2)';
             ctx.fill();
 
@@ -46,14 +47,30 @@ export class Socket {
             ctx.strokeStyle = this.type === 'CHARGER'
                 ? '#00ffaa'
                 : this.type === 'CIRCUIT'
-                ? '#ffcc00'
+                ? '#4da6ff'
                 : '#00ddff';
             ctx.setLineDash([4, 4]);
             ctx.stroke();
             ctx.setLineDash([]);
         }
 
-        // Outer industrial metal mount
+        // For CIRCUIT sockets, the circular dial housing and channels are drawn by CircuitSystem.
+        // The socket renders the center plug contact and range ring.
+        if (this.type === 'CIRCUIT') {
+            if (this.isPlugged) {
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(0, 0, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+            ctx.restore();
+            return;
+        }
+
+        // Outer industrial metal mount (for ANCHOR and CHARGER)
         ctx.fillStyle = '#22252a';
         ctx.beginPath();
         ctx.arc(0, 0, this.radius + 4, 0, Math.PI * 2);
@@ -68,35 +85,12 @@ export class Socket {
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Icon / Type indicator
+        // Type indicator for CHARGER and ANCHOR
         if (this.type === 'CHARGER') {
-            // Draw Lightning bolt
+            // Charging terminal blades
             ctx.fillStyle = '#00ffaa';
-            ctx.beginPath();
-            ctx.moveTo(2, -9);
-            ctx.lineTo(-5, 0);
-            ctx.lineTo(0, 0);
-            ctx.lineTo(-2, 9);
-            ctx.lineTo(5, -1);
-            ctx.lineTo(0, -1);
-            ctx.closePath();
-            ctx.fill();
-        } else if (this.type === 'CIRCUIT') {
-            // Draw circuit circular node with rotation hint
-            ctx.strokeStyle = this.isPlugged ? '#ffea00' : '#e67e22';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.arc(0, 0, 8, 0, Math.PI * 1.5);
-            ctx.stroke();
-
-            // Arrow head
-            ctx.fillStyle = this.isPlugged ? '#ffea00' : '#e67e22';
-            ctx.beginPath();
-            ctx.moveTo(0, -10);
-            ctx.lineTo(4, -8);
-            ctx.lineTo(0, -6);
-            ctx.closePath();
-            ctx.fill();
+            ctx.fillRect(-6, -8, 4, 16);
+            ctx.fillRect(2, -8, 4, 16);
         } else {
             // ANCHOR center pin
             ctx.fillStyle = '#00ddff';

@@ -10,7 +10,7 @@
  */
 import { Level } from './Level.js';
 import { Socket } from '../entities/Socket.js';
-import { DIRECTION } from '../modules/CircuitSystem.js';
+import { PORT, NODE_DESIGNS } from '../modules/CircuitSystem.js';
 
 export class TestRoom extends Level {
     constructor(eventBus, circuitSystem) {
@@ -55,7 +55,7 @@ export class TestRoom extends Level {
 
     _buildGeometry() {
         // Floor y = 580 (height 120)
-        // Ceiling y = 80 (height 60)
+        // Ceiling y = 40 (height 60)
 
         // 1. Ceiling (spanning entire level)
         this.colliders.push({ x: 0, y: 40, width: 3700, height: 60 });
@@ -90,11 +90,12 @@ export class TestRoom extends Level {
         // Segment 4: Circuit puzzle zone & exit chamber (x: 2400 to 3620)
         this.colliders.push({ x: 2400, y: 580, width: 1220, height: 180 });
 
+        // Elevated platforms in circuit puzzle corridor for easy dial access
+        this.colliders.push({ x: 2710, y: 480, width: 80, height: 100 });  // Under Splitter
+        this.colliders.push({ x: 2980, y: 440, width: 140, height: 140 }); // Under Corner
+
         // Ceiling socket fixture mount over swing chasm
         this.colliders.push({ x: 1580, y: 100, width: 40, height: 40 });
-
-        // Ceiling circuit junction mount
-        this.colliders.push({ x: 3080, y: 100, width: 40, height: 40 });
     }
 
     _buildSockets() {
@@ -112,11 +113,27 @@ export class TestRoom extends Level {
             })
         );
 
-        // Socket 3: Ceiling Circuit Junction Socket in Zone 5 (x: 3100, y: 170)
+        // Socket 3: Splitter Node Dial Center Socket (x: 2750, y: 240)
         this.sockets.push(
-            new Socket('circuit_socket_1', 3100, 170, 'CIRCUIT', {
-                circuitNodeId: 'junction_puzzle_1',
-                label: 'Circuit Rotator'
+            new Socket('socket_splitter', 2750, 240, 'CIRCUIT', {
+                circuitNodeId: 'junction_splitter',
+                label: 'Splitter T-Junction'
+            })
+        );
+
+        // Socket 4: Corner Node Dial Center Socket (x: 3050, y: 240)
+        this.sockets.push(
+            new Socket('socket_corner', 3050, 240, 'CIRCUIT', {
+                circuitNodeId: 'junction_corner',
+                label: 'Corner L-Bend'
+            })
+        );
+
+        // Socket 5: Straight Node Dial Center Socket (x: 3280, y: 420)
+        this.sockets.push(
+            new Socket('socket_straight', 3280, 420, 'CIRCUIT', {
+                circuitNodeId: 'junction_straight',
+                label: 'Straight I-Pipe'
             })
         );
     }
@@ -124,71 +141,118 @@ export class TestRoom extends Level {
     _buildCircuitNetwork() {
         if (!this.circuitSystem) return;
 
-        // 1. Power Source: Ceiling Nuclear Generator line (x: 2750, y: 110)
+        // 1. Power Source: Nuclear Generator Line (x: 2550, y: 240)
         this.circuitSystem.addNode({
             id: 'nuclear_gen',
             type: 'SOURCE',
-            x: 2750,
-            y: 110,
-            ports: DIRECTION.EAST, // feeds power to the right
+            x: 2550,
+            y: 240,
+            ports: [false, true, false, false], // Sends power to the Right
             isRotatable: false,
             neighbors: [
-                { nodeId: 'junction_puzzle_1', direction: DIRECTION.EAST }
+                { nodeId: 'junction_splitter', fromPort: PORT.RIGHT, toPort: PORT.LEFT }
             ]
         });
 
-        // 2. Rotatable Puzzle Junction (x: 3100, y: 110)
-        // Straight line circuit bridge. Initially vertical (NORTH | SOUTH: disconnected from live power).
-        // Rotating 90 deg clockwise turns it horizontal (EAST | WEST), connecting Nuclear Gen to Exit Door!
+        // 2. Splitter Node (T-Junction): 3 ports active (Right, Bottom, Left)
         this.circuitSystem.addNode({
-            id: 'junction_puzzle_1',
+            id: 'junction_splitter',
             type: 'JUNCTION',
-            x: 3100,
-            y: 110,
-            ports: DIRECTION.NORTH | DIRECTION.SOUTH, // Initially vertical (disconnected)
+            x: 2750,
+            y: 240,
+            ports: NODE_DESIGNS.SPLITTER_T_DOWN(), // [false, true, true, true]
             isRotatable: true,
-            rotationAngle: 0,
             neighbors: [
-                { nodeId: 'nuclear_gen', direction: DIRECTION.WEST },
-                { nodeId: 'door_receiver', direction: DIRECTION.EAST }
+                { nodeId: 'nuclear_gen', fromPort: PORT.LEFT, toPort: PORT.RIGHT },
+                { nodeId: 'junction_corner', fromPort: PORT.RIGHT, toPort: PORT.LEFT }
             ]
         });
 
-        // 3. Receiver Node: Exit Door (x: 3494, y: 380)
+        // 3. Corner Node (L-Bend): 2 adjacent ports active (initially Top & Left, needs Left & Bottom)
+        this.circuitSystem.addNode({
+            id: 'junction_corner',
+            type: 'JUNCTION',
+            x: 3050,
+            y: 240,
+            ports: NODE_DESIGNS.CORNER_TL(), // [true, false, false, true] - Misaligned initially!
+            isRotatable: true,
+            neighbors: [
+                { nodeId: 'junction_splitter', fromPort: PORT.LEFT, toPort: PORT.RIGHT },
+                { nodeId: 'junction_straight', fromPort: PORT.BOTTOM, toPort: PORT.LEFT }
+            ]
+        });
+
+        // 4. Straight Node (I-Pipe): 2 opposite ports active (initially Vertical, needs Horizontal)
+        this.circuitSystem.addNode({
+            id: 'junction_straight',
+            type: 'JUNCTION',
+            x: 3280,
+            y: 420,
+            ports: NODE_DESIGNS.STRAIGHT_V(), // [true, false, true, false] - Misaligned initially!
+            isRotatable: true,
+            neighbors: [
+                { nodeId: 'junction_corner', fromPort: PORT.LEFT, toPort: PORT.BOTTOM },
+                { nodeId: 'door_receiver', fromPort: PORT.RIGHT, toPort: PORT.LEFT }
+            ]
+        });
+
+        // 5. Receiver Node: Blast Door (x: 3480, y: 420)
         this.circuitSystem.addNode({
             id: 'door_receiver',
             type: 'RECEIVER',
-            x: 3494,
-            y: 380,
+            x: 3480,
+            y: 420,
             deviceId: 'exit_door',
-            ports: DIRECTION.WEST, // receives from junction
+            ports: [false, false, false, true], // Receives power from Left
             isRotatable: false,
             neighbors: [
-                { nodeId: 'junction_puzzle_1', direction: DIRECTION.WEST }
+                { nodeId: 'junction_straight', fromPort: PORT.LEFT, toPort: PORT.RIGHT }
             ]
         });
 
-        // Conduits for visual rendering
-        // Generator -> Junction
+        // Visual Background Conduits
+        // Generator -> Splitter
         this.circuitSystem.addConduit({
-            id: 'c_gen_junction',
+            id: 'c_gen_splitter',
             fromNodeId: 'nuclear_gen',
-            toNodeId: 'junction_puzzle_1',
+            toNodeId: 'junction_splitter',
             points: [
-                { x: 2750, y: 110 },
-                { x: 3100, y: 110 }
+                { x: 2550, y: 240 },
+                { x: 2750, y: 240 }
             ]
         });
 
-        // Junction -> Door Receiver
+        // Splitter -> Corner
         this.circuitSystem.addConduit({
-            id: 'c_junction_door',
-            fromNodeId: 'junction_puzzle_1',
+            id: 'c_splitter_corner',
+            fromNodeId: 'junction_splitter',
+            toNodeId: 'junction_corner',
+            points: [
+                { x: 2750, y: 240 },
+                { x: 3050, y: 240 }
+            ]
+        });
+
+        // Corner -> Straight (routes down and then right)
+        this.circuitSystem.addConduit({
+            id: 'c_corner_straight',
+            fromNodeId: 'junction_corner',
+            toNodeId: 'junction_straight',
+            points: [
+                { x: 3050, y: 240 },
+                { x: 3050, y: 420 },
+                { x: 3280, y: 420 }
+            ]
+        });
+
+        // Straight -> Door Receiver
+        this.circuitSystem.addConduit({
+            id: 'c_straight_door',
+            fromNodeId: 'junction_straight',
             toNodeId: 'door_receiver',
             points: [
-                { x: 3100, y: 110 },
-                { x: 3494, y: 110 },
-                { x: 3494, y: 380 }
+                { x: 3280, y: 420 },
+                { x: 3480, y: 420 }
             ]
         });
     }
@@ -294,10 +358,11 @@ export class TestRoom extends Level {
         ctx.fillText('CONNECT WIRE & HOLD [S] TO RECHARGE', 2040, 390);
 
         // Zone 5: Circuit Puzzle
-        ctx.fillText('CIRCUIT JUNCTION PUZZLE', 2900, 280);
-        ctx.fillText('1. PLUG WIRE INTO CEILING JUNCTION', 2900, 310);
-        ctx.fillText('2. PRESS [E] TO ROTATE 90 DEG CLOCKWISE', 2900, 335);
-        ctx.fillText('3. ROUTE LIVE POWER TO BLAST DOOR', 2900, 360);
+        ctx.fillText('CIRCUIT JUNCTION DIALS [PLUG IN & PRESS E TO ROTATE]', 2650, 160);
+        ctx.fillText('DIAL 1: T-JUNCTION (SPLITTER) - 3 ACTIVE PORTS', 2650, 185);
+        ctx.fillText('DIAL 2: L-BEND (CORNER) - 90 DEG ANGLE', 2650, 205);
+        ctx.fillText('DIAL 3: I-PIPE (STRAIGHT) - PASS-THROUGH', 2650, 225);
+        ctx.fillText('POWER FLOWS ONLY WHEN TOUCHING PORTS ARE BOTH ACTIVE', 2650, 395);
 
         // Zone 6: Exit
         ctx.fillText('SECURITY BLAST DOOR', 3380, 370);
