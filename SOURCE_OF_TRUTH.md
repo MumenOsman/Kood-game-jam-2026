@@ -47,6 +47,8 @@ Kood-game-jam-2026/
     |-- levels/
     |   |-- Level.js                           # Base level interface
     |   `-- TestRoom.js                        # Level layout implementing the initial tutorial sketch
+    |-- debug/
+    |   `-- DevTools.js                        # Isolated dev-only physics calibrator, telemetry, and gizmos
     `-- ui/
         `-- HUD.js                             # Battery gauge, contextual interaction prompts, status banner
 ```
@@ -143,6 +145,20 @@ Kood-game-jam-2026/
   - Listens to `TOGGLE_DEVICE(deviceId)`: Inverts electrification state.
 - Visual Effects: High-voltage animated double-phase lightning arcs (magenta `#ff4081` outer, cyan `#00e5ff` secondary, white core) with pulsating red hazard warning LEDs when active, and calm green LEDs when de-electrified.
 
+### 3.6. DevTools & Debug Inspection Suite (`DevTools.js`)
+- Production Isolation Guard: Dynamically imported only when `IS_DEV` evaluates to true (`localhost`, `127.0.0.1`, or explicit `?debug=true` query param). In public itch.io production releases, debug code is never loaded or executed.
+- Toggle Hotkeys: Tilde / Backquote (`` ` `` / `~`) or `F1` toggles the entire DevTools overlay and tuning sidebar.
+- Telemetry HUD: Real-time velocity (`vx`, `vy`), locomotion state (`GROUNDED`, `AIRBORNE`, `WALL_SLIDING`, `TETHERED`, `RESTING`), active timers (`coyoteTimer`, `jumpBufferTimer`, `wallCoyoteTimer`, `wallJumpLockTimer`), wire length, battery power, and mouse world coordinates.
+- Hitbox & Gizmo Visualizers:
+  - Player AABB with state-dependent colors (green = grounded, cyan = airborne, amber = wall slide, magenta = shock invulnerable).
+  - Wall-run surfaces with 10px contact detection threshold margins.
+  - Electrified hazards with active face indicators.
+  - Sockets with 30px magnetic latch capture radii and 280px / 500px wire range limits.
+  - Pendulum radial constraint ring around active anchor socket.
+- Trajectory Path Tracer & Apex Marker: 180-frame historical trail rendering the exact parabolic curve of jumps and pendulum swings, marking jump apex height and horizontal distance span.
+- Interactive Distance Ruler: Hold `Shift` + `Right-Click` and drag to measure horizontal distance (`dx`), vertical height difference (`dy`), and Euclidean distance (`dist`) in pixels.
+- Live Physics Tuning Sidebar: Floating DOM drawer with live two-way bound sliders for walk/run speeds, acceleration, friction, ground jump, wall jump up/outward impulses, wall slide speeds, gravity, wire throw speeds, and reel speed. Includes a `[Copy Config]` button that exports calibrated JavaScript constants to clipboard.
+
 ---
 
 ## 4. EventBus Topic Registry
@@ -218,5 +234,6 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 - 2026-11-03: Implemented modular Wall Run and Wall Jump mechanics (clamped slide speed 110 px/s, coyote timer, wall kick impulse 340 px/s outward and -490 px/s upward with directional lock). Implemented modular HazardSystem managing electrified colliders of any orientation (left, right, top, bottom, all), directional knockback, -8% battery shock drain, and high-voltage double-phase lightning arc rendering. Extended TestRoom with Chamber 02, vertical chimney shaft (160 px wide), substation power line, cutoff dial, and upper floor platform. Added Level.js helper methods (addWallRunWall, addHazardObject, renderWallRunGripStrips) for seamless level extensibility.
 - 2026-11-03: Refined wall run mechanics: player automatically sticks to wall-runnable surfaces upon contact without requiring A or D input; pressing either Space or S allows jumping off the wall. Added contextual HUD prompt and updated InputManager with downPressed support.
 - 2026-11-03: Updated wall sliding and jumping controls per feedback: pressing/holding S accelerates slide down to 320 px/s without jumping; only Space executes the wall jump. Updated HUD prompt to [Space] Wall Jump | Hold [S] Fast Slide and footer controls legend.
+- 2026-11-03: Implemented isolated DevTools & Debug System (DevTools.js): gated by IS_DEV environment check, toggleable via `~` or F1. Features real-time kinematics telemetry HUD, hitbox and socket constraint gizmos, jump trajectory and apex tracer, Shift+RMB interactive pixel distance ruler, and live DOM physics tuning panel with clipboard preset export.
 
 
