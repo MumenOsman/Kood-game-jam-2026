@@ -117,14 +117,12 @@ Kood-game-jam-2026/
 ### 3.4. Wall Run & Wall Jump Mechanics (`PlayerMovement.js` & `Level.js`)
 - Modular Wall Definition: Any collider registered in any level with `isWallRunnable: true` acts as a wall-runnable surface. Supports `wallRunFace: 'left' | 'right' | 'both'` (default: `'both'`).
 - Auto-Stick Contact: When airborne and contacting a valid non-electrified wall-run surface, the player automatically sticks to the wall flush against its face without needing to hold A or D. Horizontal velocity stops (`vx = 0`), facing aligns toward the wall, and descent speed is clamped to 110 px/s (`isWallSliding = true`).
+- Fast Slide with S: Holding S (`moveDown`) accelerates the descent speed down the wall to 320 px/s (`FAST_WALL_SLIDE_SPEED = 320 px/s`). S does not cause jumping from the wall.
+- Wall Jump Execution (Space ONLY): Wall jump is triggered strictly by pressing Space (`jumpPressed`). S does not jump. Wall jump launches the robot outward (340 px/s) and upward (-490 px/s) away from the wall.
 - Wall Coyote Time: 120ms buffer allowing wall jump immediately after sliding off or detaching from the wall.
-- Dual-Key Wall Jump Trigger: Pressing either `Space` or `S` while attached to the wall or during wall coyote time triggers the wall jump.
-- Wall Kick Impulse:
-  - Vertical: -490 px/s (snappy upward leap)
-  - Horizontal: 340 px/s directed away from the wall (outward kick)
 - Directional Lock: 150ms input lock during wall kick to prevent immediate counter-steering and preserve parabolic leap arc.
 - Electrification Check: If a wall is electrified (`isElectrified: true`), wall sliding is blocked and player contact triggers a high-voltage shock instead.
-- Visual Cue: `Level.renderWallRunGripStrips(ctx)` renders cyan tactile friction runner grooves along runnable wall faces. HUD displays contextual prompt `[Space] or [S] Wall Jump` while sliding.
+- Visual Cue: `Level.renderWallRunGripStrips(ctx)` renders cyan tactile friction runner grooves along runnable wall faces. HUD displays contextual prompt `[Space] Wall Jump  |  Hold [S] Fast Slide` while sliding.
 
 ### 3.5. Modular Electrified Hazards & Objects (`HazardSystem.js` & `Level.js`)
 - Modular Hazard Architecture: Managed by `HazardSystem`, completely decoupled from specific room geometry. Any collider in any level with `isElectrified: true` acts as an active hazard.
@@ -199,8 +197,8 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 |---|---|
 | A / D | Walk Left / Right |
 | Shift + A / D | Run Left / Right |
-| Space | Jump from ground / Mid-air Tether Jump / Wall Jump |
-| S | Dock / Rest (on ground) / Wall Jump (when attached to wall) |
+| Space | Jump from ground / Mid-air Tether Jump / Wall Jump (only Space wall jumps) |
+| S | Dock / Rest (on ground) / Fast Slide (when attached to wall) |
 | Hold LMB | Aim and spin head plug, previewing parabolic trajectory arc |
 | Release LMB | Launch plug projectile along arc |
 | RMB | Cut / unplug wire cleanly without jump boost |
@@ -219,5 +217,6 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 - 2026-11-03: Implemented subtle battery power depletion system (walking 0.5%/s, running 1.2%/s, jumps 1.5%, tether jumps 2.0%, dial rotation 3.0%). Added Low Power Mode (< 25%), Emergency Crawl Mode (0%), emergency rest trickle recharge (+1%/s up to 20%), trailing ghost depletion bar in HUD, and cleaned conduit termination at dial housing rims.
 - 2026-11-03: Implemented modular Wall Run and Wall Jump mechanics (clamped slide speed 110 px/s, coyote timer, wall kick impulse 340 px/s outward and -490 px/s upward with directional lock). Implemented modular HazardSystem managing electrified colliders of any orientation (left, right, top, bottom, all), directional knockback, -8% battery shock drain, and high-voltage double-phase lightning arc rendering. Extended TestRoom with Chamber 02, vertical chimney shaft (160 px wide), substation power line, cutoff dial, and upper floor platform. Added Level.js helper methods (addWallRunWall, addHazardObject, renderWallRunGripStrips) for seamless level extensibility.
 - 2026-11-03: Refined wall run mechanics: player automatically sticks to wall-runnable surfaces upon contact without requiring A or D input; pressing either Space or S allows jumping off the wall. Added contextual HUD prompt and updated InputManager with downPressed support.
+- 2026-11-03: Updated wall sliding and jumping controls per feedback: pressing/holding S accelerates slide down to 320 px/s without jumping; only Space executes the wall jump. Updated HUD prompt to [Space] Wall Jump | Hold [S] Fast Slide and footer controls legend.
 
 
