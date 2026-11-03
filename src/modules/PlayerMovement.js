@@ -43,7 +43,8 @@ export class PlayerMovement {
         this.IDLE_REST_THRESHOLD = 3.5; // 3.5s before resting
 
         // Modular Wall Run & Wall Jump constants
-        this.MAX_WALL_SLIDE_SPEED = 110; // Clamped descent speed while sliding (px/s)
+        this.MAX_WALL_SLIDE_SPEED = 110; // Normal descent speed while sliding (px/s)
+        this.FAST_WALL_SLIDE_SPEED = 320; // Fast slide descent speed when holding S (px/s)
         this.WALL_JUMP_UP = -490; // Upward leap impulse (px/s)
         this.WALL_JUMP_OUTWARD = 340; // Horizontal impulse away from wall (px/s)
         this.WALL_COYOTE_TIME = 0.10; // 100ms grace window after leaving wall
@@ -75,12 +76,8 @@ export class PlayerMovement {
             p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
         }
 
-        // Jump buffer from Space, or S when attached to wall / wall coyote
-        const isWallJumpCandidate = (p.isWallSliding || p.wallCoyoteTimer > 0) && !p.isGrounded && !p.isTethered;
-        const downPressed = Boolean(this.input.downPressed || (this.input.isKeyPressed && (this.input.isKeyPressed('KeyS') || this.input.isKeyPressed('ArrowDown'))));
-        const wallJumpInput = isWallJumpCandidate && downPressed;
-
-        if (this.input.jumpPressed || wallJumpInput) {
+        // Jump buffer from Space ONLY (wall jump is executed solely via Space)
+        if (this.input.jumpPressed) {
             p.jumpBufferTimer = this.JUMP_BUFFER_TIME;
         } else {
             p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
@@ -122,11 +119,13 @@ export class PlayerMovement {
                 const canTouchLeftFace = (face === 'left' || face === 'both');
                 const touchingLeftFace = canTouchLeftFace && Math.abs((p.x + p.width) - col.x) <= 10;
 
+                const targetSlideSpeed = this.input.moveDown ? this.FAST_WALL_SLIDE_SPEED : this.MAX_WALL_SLIDE_SPEED;
+
                 if (touchingRightFace) {
                     p.isWallSliding = true;
                     p.wallSlideDirection = -1; // Wall is to the player's left
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
-                    p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    p.vy = targetSlideSpeed;
                     p.vx = 0;
                     p.x = col.x + col.width;
                     p.facing = -1;
@@ -135,7 +134,7 @@ export class PlayerMovement {
                     p.isWallSliding = true;
                     p.wallSlideDirection = 1; // Wall is to the player's right
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
-                    p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    p.vy = targetSlideSpeed;
                     p.vx = 0;
                     p.x = col.x - p.width;
                     p.facing = 1;
@@ -326,6 +325,10 @@ export class PlayerMovement {
 
     _applyGravity(dt) {
         const p = this.player;
+        if (p.isWallSliding) {
+            p.vy = this.input.moveDown ? this.FAST_WALL_SLIDE_SPEED : this.MAX_WALL_SLIDE_SPEED;
+            return;
+        }
         p.vy += this.GRAVITY * dt;
         if (p.vy > this.MAX_FALL_SPEED) {
             p.vy = this.MAX_FALL_SPEED;

@@ -149,7 +149,7 @@ export class HUD {
                 prompt = '[RMB] Unplug Wire';
             }
         } else if (p.isWallSliding) {
-            prompt = '[Space] or [S] Wall Jump';
+            prompt = '[Space] Wall Jump  |  Hold [S] Fast Slide';
         } else if (p.isAiming) {
             prompt = `Aiming... Power: ${Math.round(p.aimPower * 100)}%`;
         }
