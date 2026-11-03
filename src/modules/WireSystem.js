@@ -15,8 +15,8 @@ export class WireSystem {
         // Constants
         this.MAX_WIRE_LENGTH = 500;
         this.MIN_WIRE_LENGTH = 45;
-        this.MIN_THROW_SPEED = 450;
-        this.MAX_THROW_SPEED = 950;
+        this.MIN_THROW_SPEED = 800;
+        this.MAX_THROW_SPEED = 1200;
         this.PROJECTILE_GRAVITY = 900;
         this.REEL_SPEED = 180; // px/s for climbing W/S
 

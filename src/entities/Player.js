@@ -22,6 +22,13 @@ export class Player {
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
 
+        // Wall sliding / wall jumping states
+        this.isWallSliding = false;
+        this.wallSlideDirection = 0; // -1 = touching left wall, 1 = touching right wall
+        this.wallCoyoteTimer = 0;
+        this.wallJumpLockTimer = 0; // Brief directional lock during wall kick
+        this.shockInvulnTimer = 0; // Invulnerability / stun timer after shock
+
         // Tether states
         this.isTethered = false;
         this.tetherSocket = null;

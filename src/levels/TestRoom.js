@@ -17,7 +17,7 @@ export class TestRoom extends Level {
         super(eventBus);
         this.circuitSystem = circuitSystem;
 
-        this.width = 3700;
+        this.width = 5100;
         this.height = 760;
         this.spawnPoint = { x: 120, y: 480 };
 
@@ -54,17 +54,14 @@ export class TestRoom extends Level {
     }
 
     _buildGeometry() {
-        // Floor y = 580 (height 120)
-        // Ceiling y = 40 (height 60)
-
-        // 1. Ceiling (spanning entire level)
-        this.colliders.push({ x: 0, y: 40, width: 3700, height: 60 });
+        // 1. Ceiling (spanning entire facility)
+        this.colliders.push({ x: 0, y: 40, width: 5100, height: 60 });
 
         // 2. Left wall (Spawn chamber)
         this.colliders.push({ x: 0, y: 40, width: 50, height: 660 });
 
-        // 3. Right boundary wall
-        this.colliders.push({ x: 3620, y: 40, width: 80, height: 660 });
+        // 3. Right boundary wall at end of Upper Sector
+        this.colliders.push({ x: 5020, y: 40, width: 80, height: 660 });
 
         // 4. Floor Segments:
         // Segment 1: Spawn chamber & tutorial corridor (x: 40 to 860)
@@ -87,8 +84,8 @@ export class TestRoom extends Level {
         // Small alcove wall near charger
         this.colliders.push({ x: 2280, y: 580, width: 40, height: 180 });
 
-        // Segment 4: Circuit puzzle zone & exit chamber (x: 2400 to 3620)
-        this.colliders.push({ x: 2400, y: 580, width: 1220, height: 180 });
+        // Segment 4: Circuit puzzle zone, blast door exit & Chamber 02 floor (x: 2400 to 4340)
+        this.colliders.push({ x: 2400, y: 580, width: 1940, height: 180 });
 
         // Elevated platforms in circuit puzzle corridor for easy dial access
         this.colliders.push({ x: 2710, y: 480, width: 80, height: 100 });  // Under Splitter
@@ -96,6 +93,37 @@ export class TestRoom extends Level {
 
         // Ceiling socket fixture mount over swing chasm
         this.colliders.push({ x: 1580, y: 100, width: 40, height: 40 });
+
+        // 5. Chamber 02 & Vertical Shaft Geometry (From media_1793727603625_21c05ec9.png):
+        // Chamber 02 intermediate ceiling
+        this.colliders.push({ x: 3508, y: 140, width: 642, height: 30 });
+
+        // Shaft Left Wall: Electrified by default, de-electrified via circuit cutoff dial
+        this.addHazardObject({
+            x: 4150,
+            y: 140,
+            width: 30,
+            height: 440,
+            isWallRunnable: true,
+            wallRunFace: 'right',
+            isElectrified: true,
+            electrifiedFace: 'right',
+            deviceId: 'shaft_left_wall',
+            shockDamage: 8.0,
+            knockbackForce: 360
+        });
+
+        // Shaft Right Wall: Wall-runnable grip surface
+        this.addWallRunWall({
+            x: 4340,
+            y: 260,
+            width: 30,
+            height: 320,
+            wallRunFace: 'left'
+        });
+
+        // Upper Floor Platform extending rightward from the top of the right wall
+        this.colliders.push({ x: 4340, y: 260, width: 700, height: 50 });
     }
 
     _buildSockets() {
@@ -134,6 +162,14 @@ export class TestRoom extends Level {
             new Socket('socket_straight', 3280, 420, 'CIRCUIT', {
                 circuitNodeId: 'junction_straight',
                 label: 'Straight I-Pipe'
+            })
+        );
+
+        // Socket 6: Chamber 02 Wall Power Cutoff Dial (x: 4020, y: 380)
+        this.sockets.push(
+            new Socket('socket_wall_cutoff', 4020, 380, 'CIRCUIT', {
+                circuitNodeId: 'dial_wall_cutoff',
+                label: 'Wall Power Cutoff'
             })
         );
     }
@@ -255,6 +291,71 @@ export class TestRoom extends Level {
                 { x: 3480 - 10, y: 420 }
             ]
         });
+
+        // 6. Chamber 02: Wall Power Feed & Cutoff Network (From media_1793727603625_21c05ec9.png)
+        // Substation Power Source in Chamber 02
+        this.circuitSystem.addNode({
+            id: 'substation_power',
+            type: 'SOURCE',
+            x: 3820,
+            y: 380,
+            ports: [false, true, false, false], // Sends power to the Right
+            isRotatable: false,
+            neighbors: [
+                { nodeId: 'dial_wall_cutoff', fromPort: PORT.RIGHT, toPort: PORT.LEFT }
+            ]
+        });
+
+        // Wall Cutoff Dial: Straight I-Pipe initially aligned Horizontal (power flows to left wall!)
+        // Rotating 90 deg clockwise to Vertical cuts power to the left wall
+        this.circuitSystem.addNode({
+            id: 'dial_wall_cutoff',
+            type: 'JUNCTION',
+            x: 4020,
+            y: 380,
+            ports: NODE_DESIGNS.STRAIGHT_H(), // [false, true, false, true] - Initially CONNECTED!
+            isRotatable: true,
+            neighbors: [
+                { nodeId: 'substation_power', fromPort: PORT.LEFT, toPort: PORT.RIGHT },
+                { nodeId: 'receiver_wall_power', fromPort: PORT.RIGHT, toPort: PORT.LEFT }
+            ]
+        });
+
+        // Receiver: Shaft Left Electrified Wall
+        this.circuitSystem.addNode({
+            id: 'receiver_wall_power',
+            type: 'RECEIVER',
+            x: 4150,
+            y: 380,
+            deviceId: 'shaft_left_wall',
+            ports: [false, false, false, true], // Receives power from Left
+            isRotatable: false,
+            neighbors: [
+                { nodeId: 'dial_wall_cutoff', fromPort: PORT.LEFT, toPort: PORT.RIGHT }
+            ]
+        });
+
+        // Substation -> Wall Cutoff Dial Conduit
+        this.circuitSystem.addConduit({
+            id: 'c_sub_cutoff',
+            fromNodeId: 'substation_power',
+            toNodeId: 'dial_wall_cutoff',
+            points: [
+                { x: 3820 + 34, y: 380 },
+                { x: 4020 - 34, y: 380 }
+            ]
+        });
+
+        // Wall Cutoff Dial -> Shaft Left Wall Conduit
+        this.circuitSystem.addConduit({
+            id: 'c_cutoff_wall',
+            fromNodeId: 'dial_wall_cutoff',
+            toNodeId: 'receiver_wall_power',
+            points: [
+                { x: 4020 + 34, y: 380 },
+                { x: 4150 - 2, y: 380 }
+            ]
+        });
     }
 
     update(dt) {
@@ -367,6 +468,18 @@ export class TestRoom extends Level {
         // Zone 6: Exit
         ctx.fillText('SECURITY BLAST DOOR', 3380, 370);
 
+        // Zone 7: Chamber 02 & Vertical Ascent Shaft (From media_1793727603625_21c05ec9.png)
+        ctx.fillText('CHAMBER 02 - VERTICAL SHAFT ACCESS', 3620, 240);
+        ctx.fillText('WALL POWER CUTOFF DIAL: ROTATE [E] TO DE-ENERGIZE LEFT WALL', 3620, 275);
+        ctx.fillText('WALL RUN: HOLD [A] / [D] AGAINST WALL TO SLIDE', 3620, 305);
+        ctx.fillText('WALL JUMP: PRESS [SPACE] WHILE SLIDING TO LEAP ACROSS SHAFT', 3620, 330);
+
+        // Shaft labels
+        ctx.fillStyle = '#ff4081';
+        ctx.fillText('HIGH VOLTAGE HAZARD', 4160, 130);
+        ctx.fillStyle = '#4da6ff';
+        ctx.fillText('UPPER SECTOR 02 REACHED', 4420, 200);
+
         ctx.restore();
     }
 
@@ -400,10 +513,13 @@ export class TestRoom extends Level {
             }
         }
 
-        // 2. Render Exit Blast Door
+        // 2. Render Wall Run tactile grip strips
+        this.renderWallRunGripStrips(ctx);
+
+        // 3. Render Exit Blast Door
         this._renderDoor(ctx);
 
-        // 3. Render Sockets
+        // 4. Render Sockets
         for (const sock of this.sockets) {
             sock.render(ctx);
         }

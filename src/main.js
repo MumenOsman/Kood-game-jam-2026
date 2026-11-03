@@ -13,6 +13,7 @@ import { Player } from './entities/Player.js';
 import { PlayerMovement } from './modules/PlayerMovement.js';
 import { WireSystem } from './modules/WireSystem.js';
 import { CircuitSystem } from './modules/CircuitSystem.js';
+import { HazardSystem } from './modules/HazardSystem.js';
 import { AnimationController } from './modules/AnimationController.js';
 import { TestRoom } from './levels/TestRoom.js';
 import { HUD } from './ui/HUD.js';
@@ -45,6 +46,7 @@ async function bootstrap() {
     // 4. Modules
     const movement = new PlayerMovement(eventBus, input, player, level);
     const wireSystem = new WireSystem(eventBus, input, player, level);
+    const hazardSystem = new HazardSystem(eventBus, player, level);
     const animation = new AnimationController(assetLoader);
     const hud = new HUD(player, camera);
 
@@ -56,7 +58,19 @@ async function bootstrap() {
     eventBus.on('ACTIVATE_DEVICE', (deviceId) => {
         if (deviceId === 'exit_door') {
             hud.setMessage('POWER RESTORED: Blast door unlocking!', 5);
+        } else if (deviceId === 'shaft_left_wall') {
+            hud.setMessage('WARNING: Shaft left wall energized with high voltage!', 4);
         }
+    });
+
+    eventBus.on('DEACTIVATE_DEVICE', (deviceId) => {
+        if (deviceId === 'shaft_left_wall') {
+            hud.setMessage('SHAFT HAZARD OFFLINE: Wall safe for climbing!', 5);
+        }
+    });
+
+    eventBus.on('PLAYER_SHOCKED', ({ damage }) => {
+        hud.setMessage(`HIGH VOLTAGE SHOCK: -${damage.toFixed(0)}% POWER`, 3.5);
     });
 
     eventBus.on('PLAYER_TETHER_JUMP', () => {
@@ -70,6 +84,7 @@ async function bootstrap() {
             movement.init(eng);
             wireSystem.init(eng);
             circuitSystem.init(eng);
+            hazardSystem.init(eng);
         },
         update(dt) {
             // Level entities update
@@ -77,6 +92,9 @@ async function bootstrap() {
 
             // Circuit rotation & power propagation
             circuitSystem.update(dt);
+
+            // Electrified hazards & shock detection
+            hazardSystem.update(dt);
 
             // Player kinematics & collisions
             movement.update(dt);
@@ -114,6 +132,7 @@ async function bootstrap() {
             level.renderBackground(ctx);
             circuitSystem.render(ctx);
             level.renderForeground(ctx);
+            hazardSystem.render(ctx);
             wireSystem.render(ctx);
             animation.render(ctx, player);
 

@@ -91,6 +91,21 @@ export class AnimationController {
 
         ctx.save();
 
+        // Shock invulnerability flicker
+        if (player.shockInvulnTimer > 0 && Math.sin(player.shockInvulnTimer * 45) > 0) {
+            ctx.globalAlpha = 0.35;
+        }
+
+        // Render wall friction sparks if wall sliding
+        if (player.isWallSliding) {
+            const wallX = player.wallSlideDirection === -1 ? player.x : player.x + player.width;
+            ctx.fillStyle = '#ffaa00';
+            for (let i = 0; i < 2; i++) {
+                const sy = player.y + 30 + Math.random() * 30;
+                ctx.fillRect(wallX - 1.5, sy, 3, 3);
+            }
+        }
+
         // Render charging energy aura if recharging
         if (player.isCharging) {
             const head = player.getHeadSocket();

@@ -41,10 +41,28 @@ export class PlayerMovement {
         this.COYOTE_TIME = 0.12; // 120ms
         this.JUMP_BUFFER_TIME = 0.12; // 120ms
         this.IDLE_REST_THRESHOLD = 3.5; // 3.5s before resting
+
+        // Modular Wall Run & Wall Jump constants
+        this.MAX_WALL_SLIDE_SPEED = 110; // Clamped descent speed while sliding (px/s)
+        this.WALL_JUMP_UP = -490; // Upward leap impulse (px/s)
+        this.WALL_JUMP_OUTWARD = 340; // Horizontal impulse away from wall (px/s)
+        this.WALL_COYOTE_TIME = 0.10; // 100ms grace window after leaving wall
+        this.WALL_JUMP_LOCK_TIME = 0.15; // 150ms directional lock to preserve jump arc
     }
 
     init(engine) {
         this.engine = engine;
+
+        // Listen for electric hazard shock events
+        this.eventBus.on('PLAYER_SHOCKED', ({ damage, knockbackX, knockbackY }) => {
+            const p = this.player;
+            p.drainBattery(damage);
+            p.vx = knockbackX;
+            p.vy = knockbackY;
+            p.isWallSliding = false;
+            p.wallCoyoteTimer = 0;
+            this.eventBus.emit('BATTERY_CHANGED', p.battery);
+        });
     }
 
     update(dt) {
@@ -63,19 +81,73 @@ export class PlayerMovement {
             p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
         }
 
+        if (p.wallJumpLockTimer > 0) {
+            p.wallJumpLockTimer -= dt;
+        }
+        if (p.shockInvulnTimer > 0) {
+            p.shockInvulnTimer -= dt;
+        }
+
         // 2. Tether Mid-Air Jump Handling
-        // If player is tethered in mid-air and presses Space:
-        // Jump and unplug at the same time toward the direction they are facing or steering (A/D)
         if (p.isTethered && !p.isGrounded && p.jumpBufferTimer > 0) {
             this._performTetherJump();
             p.jumpBufferTimer = 0;
             return;
         }
 
-        // 3. Resting / Docking & Idle State
+        // 3. Wall Slide & Wall Jump Handling
+        p.isWallSliding = false;
+        if (!p.isGrounded && !p.isTethered && p.shockInvulnTimer <= 0 && p.vy > -50) {
+            const wallRunners = this.level ? this.level.getWallRunColliders() : [];
+            for (const col of wallRunners) {
+                if (col.isElectrified) continue; // Cannot wall-slide on electrified surface
+
+                const verticalOverlap = (p.y + p.height > col.y + 4) && (p.y < col.y + col.height - 4);
+                if (!verticalOverlap) continue;
+
+                const face = col.wallRunFace || 'both';
+
+                // Touching right face of collider (player is to the right of col, holding A to slide)
+                const canTouchRightFace = (face === 'right' || face === 'both');
+                const touchingRightFace = canTouchRightFace && this.input.moveLeft && Math.abs(p.x - (col.x + col.width)) < 10;
+
+                // Touching left face of collider (player is to the left of col, holding D to slide)
+                const canTouchLeftFace = (face === 'left' || face === 'both');
+                const touchingLeftFace = canTouchLeftFace && this.input.moveRight && Math.abs((p.x + p.width) - col.x) < 10;
+
+                if (touchingRightFace) {
+                    p.isWallSliding = true;
+                    p.wallSlideDirection = -1; // Wall is to the player's left
+                    p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
+                    p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    break;
+                } else if (touchingLeftFace) {
+                    p.isWallSliding = true;
+                    p.wallSlideDirection = 1; // Wall is to the player's right
+                    p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
+                    p.vy = Math.min(p.vy, this.MAX_WALL_SLIDE_SPEED);
+                    break;
+                }
+            }
+        }
+
+        if (!p.isWallSliding) {
+            p.wallCoyoteTimer = Math.max(0, p.wallCoyoteTimer - dt);
+        }
+
+        // Wall Jump Execution
+        if (p.jumpBufferTimer > 0 && p.wallCoyoteTimer > 0 && !p.isGrounded && !p.isTethered) {
+            this._performWallJump();
+            p.jumpBufferTimer = 0;
+            return;
+        }
+
+        // 4. Resting / Docking & Idle State
         let horizontalIntent = 0;
-        if (this.input.moveLeft) horizontalIntent -= 1;
-        if (this.input.moveRight) horizontalIntent += 1;
+        if (p.wallJumpLockTimer <= 0) {
+            if (this.input.moveLeft) horizontalIntent -= 1;
+            if (this.input.moveRight) horizontalIntent += 1;
+        }
 
         if (horizontalIntent !== 0) {
             p.facing = horizontalIntent;
@@ -221,6 +293,22 @@ export class PlayerMovement {
         p.isGrounded = false;
 
         this.eventBus.emit('PLAYER_TETHER_JUMP', { x: p.x, y: p.y, dir });
+    }
+
+    _performWallJump() {
+        const p = this.player;
+        const jumpDir = -p.wallSlideDirection; // Leap outward away from wall
+
+        p.vx = jumpDir * this.WALL_JUMP_OUTWARD;
+        p.vy = this.WALL_JUMP_UP;
+        p.facing = jumpDir;
+        p.wallJumpLockTimer = this.WALL_JUMP_LOCK_TIME;
+        p.wallCoyoteTimer = 0;
+        p.isWallSliding = false;
+
+        p.drainBattery(this.COST_JUMP);
+        this.eventBus.emit('BATTERY_CHANGED', p.battery);
+        this.eventBus.emit('PLAYER_WALL_JUMP', { x: p.x, y: p.y, dir: jumpDir });
     }
 
     _applyGravity(dt) {
