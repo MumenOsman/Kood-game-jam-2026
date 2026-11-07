@@ -1,0 +1,64 @@
+{
+	"identifier": "Level_0",
+	"uniqueIdentifer": "98ab4070-bde0-11f1-b860-77bbf91bba19",
+	"x": 0,
+	"y": 0,
+	"width": 640,
+	"height": 320,
+	"bgColor": "#696A79",
+	"neighbourLevels": [
+		{
+			"levelIid": "8f10ab50-bde0-11f1-b860-a3534b8b5122",
+			"dir": "e"
+		}
+	],
+	"customFields" : {},
+	"layers": [
+		"Factory2.png",
+		"Test_layer.png",
+		"Pipes.png"
+	],
+	"entities": {
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "ea2b79d0-bde0-11f1-a2c7-3f3c9bd04ef0",
+				"layer": "Socket_dials",
+				"x": 112,
+				"y": 176,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone"
+				}
+			},
+			{
+				"id": "Drone",
+				"iid": "efcea6f0-bde0-11f1-a2c7-e926c6577a53",
+				"layer": "Socket_dials",
+				"x": 400,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone"
+				}
+			}
+		],
+		"Player_Spawn": [
+			{
+				"id": "Player_Spawn",
+				"iid": "6265ed30-bde0-11f1-b860-e970c7597f68",
+				"layer": "Main_Player",
+				"x": 64,
+				"y": 192,
+				"width": 32,
+				"height": 32,
+				"color": 12470831,
+				"customFields" : {}
+			}
+		]
+	}
+}

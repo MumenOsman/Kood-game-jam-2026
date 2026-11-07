@@ -24,7 +24,9 @@ Kood-game-jam-2026/
 |   |-- sprites/
 |   |   |-- Hero-sprites.jpg                   # Original reference spritesheet
 |   |   |-- Hero-sprites.png                   # Transparent background processed spritesheet
-|   |   `-- Hero-sprites.json                  # Frame coordinates for all animation states
+|   |   |-- Hero-sprites.json                  # Frame coordinates for all animation states
+|   |   |-- Hero-v2.png                        # New Sci-Fi hero spritesheet (74 normalized animation frames)
+|   |   `-- Hero-v2.json                       # Frame coordinates for idle, run, jump, swing, hurt, death
 |   `-- levels/
 |       `-- Initial-level-concept.png          # Reference level design sketch
 `-- src/
@@ -37,16 +39,19 @@ Kood-game-jam-2026/
     |   `-- AssetLoader.js                     # Asset loader with fallback image support
     |-- entities/
     |   |-- Player.js                          # Robot entity state, transform, battery, head socket
-    |   `-- Socket.js                          # Sockets: ANCHOR, CIRCUIT, CHARGER
+    |   |-- Socket.js                          # Sockets: ANCHOR, CIRCUIT, CHARGER
+    |   `-- Drone.js                           # Tutorial guide & facility hover drones with proximity dialogue
     |-- modules/
     |   |-- PlayerMovement.js                  # Platformer kinematics, friction, jump, tether jump, wall slide/jump
     |   |-- WireSystem.js                      # Trajectory arc, projectile throw, mid-air pendulum physics
     |   |-- CircuitSystem.js                   # Bitmask directional ports, BFS power propagation, rotation
+    |   |-- PipeSystem.js                      # Industrial pipe flow engine, traveling lights, dynamic power routing
     |   |-- HazardSystem.js                    # Electrified objects, hazards, shock triggers, and arc rendering
     |   `-- AnimationController.js             # Sprite playback and procedural fallback renderer
     |-- levels/
     |   |-- Level.js                           # Base level interface
-    |   `-- TestRoom.js                        # Level layout implementing the initial tutorial sketch
+    |   |-- TestRoom.js                        # Level layout implementing the initial tutorial sketch
+    |   `-- LDtkLevel.js                       # Modular LDtk level loader (IntGrid collisions, greedy merging, composite render)
     |-- debug/
     |   `-- DevTools.js                        # Isolated dev-only physics calibrator, telemetry, and gizmos
     `-- ui/
@@ -58,20 +63,26 @@ Kood-game-jam-2026/
 ## 3. Core Mechanics & Technical Specifications
 
 ### 3.1. Locomotion & Platforming (`PlayerMovement.js`)
-- Walk Speed: 190 px/s (Nominal), 110 px/s (Emergency Crawl when depleted)
-- Run Speed: 330 px/s (hold Shift; disabled during Low Power < 25% or Depleted)
-- Ground Acceleration: 1800 px/s^2
-- Air Acceleration: 1200 px/s^2
-- Ground Friction: 0.82
-- Gravity: 1400 px/s^2, Terminal Velocity: 850 px/s
-- Normal Jump: -520 px/s (Nominal), -470 px/s (Low Power), -280 px/s (Emergency Hop when depleted)
-- Coyote Time: 120ms, Jump Buffering: 120ms
-- Mid-Air Tether Jump: When airborne and connected to a wire, pressing Space unplugs the wire and imparts an upward (-460 px/s) and horizontal (+/- 280 px/s) leap towards the player's facing/steering direction.
-- Idle Rest & Docking: After 3.5 seconds stationary on the ground, or immediately when pressing S while grounded, the robot enters the rest state.
-- Energy Budget & Subtle Depletion:
-  - Max Battery: 100.0%
-  - Walking Drain: 0.5% / sec
-  - Running Drain: 1.2% / sec
+- Arcade Deterministic Kinematics (Option 1 / "Brawlhalla" Style):
+  - Unit of Measurement: Strictly locked to 32px grid squares (`1 sq = 32px`).
+  - Physical Dimensions: Exactly $32 \times 32\text{ px}$ (1 grid square).
+  - Jump Apex Height: Strictly capped at **2 squares ($64\text{ px}$)** via discrete Euler impulse $v_0 = -435.15\text{ px/s}$ with gravity $g = 1400\text{ px/s}^2$.
+  - Jump Horizontal Landing Span: Strictly capped at **2 squares ($64\text{ px}$)** via air velocity clamping $v_x = 103.8\text{ px/s}$ ($63.5\text{ px}$ landing span). Jumping while sprinting never overshoots the 2-tile span limit.
+  - Instant Ground Locomotion: Instant full walk speed (5.0 sq/s = 160 px/s) or run speed (8.0 sq/s = 256 px/s) on key press, and instant crisp stop (`vx = 0`) on key release (zero ice-skating drift or sliding lag).
+  - Deterministic Space Tap: Fixed jump arc by default; tapping Space executes the full 2-square arc cleanly without accidental cutoffs.
+- Ground Locomotion Speeds:
+  - Walk Speed: 5.0 sq/s ($160\text{ px/s}$)
+  - Run Speed (Shift): 8.0 sq/s ($256\text{ px/s}$)
+  - Emergency Depleted Crawl: 2.5 sq/s ($80\text{ px/s}$)
+- Jump Kinematics:
+  - Ground Jump Apex: Strictly 2 squares ($64\text{ px}$)
+  - Wall Jump: 2 squares up ($64\text{ px}$), 2 squares outward ($64\text{ px}$)
+  - Tether Mid-Air Jump: 2 squares up, 2 squares forward
+  - Coyote Time: 120ms buffer for ledge jumps
+  - Jump Buffer: 120ms pre-landing jump press memory
+- Energy Mechanics:
+  - Drain Walk: 0.5% / sec
+  - Drain Run: 1.2% / sec
   - Ground Jump Cost: 1.5% per jump
   - Tether Jump Cost: 2.0% per jump
   - Circuit Dial Rotation Cost: 3.0% per 90 deg turn
@@ -82,19 +93,19 @@ Kood-game-jam-2026/
   - Nominal (> 50%): Full speed and mobility, green HUD bar.
   - Moderate (25% - 50%): Full mobility, warm amber HUD bar.
   - Low Power (1% - 25%): Red pulsing HUD bar, sprinting disabled, jump force slightly softened.
-  - Depleted (0%): Emergency crawl mode (110 px/s), small hops (-280 px/s), can sit to trickle back up to 20% or plug into charger. Zero punishment or resets.
+  - Depleted (0%): Emergency crawl mode (80 px/s), small hops, can sit to trickle back up to 20% or plug into charger. Zero punishment or resets.
 
 ### 3.2. Wire & Tether Dynamics (`WireSystem.js`)
-- Max Wire Length: 280 px
-- Min Wire Length: 45 px
-- Reeling Speed: 180 px/s (climb with W, descend with S while airborne)
-- Socket Highlight: Sockets within 280 px highlight automatically.
-- Aiming: Holding Left Mouse Button (LMB) spins the plug around the robot head, charging launch speed from 450 to 950 px/s and rendering a 22-step parabolic trajectory arc.
-- Firing: Releasing LMB launches the projectile along the simulated trajectory. Colliding with a socket within 30 px snaps and latches.
+- Max Wire Length: 3 squares ($96\text{ px}$) strictly locked.
+- Min Wire Length: 20 px
+- Projectile Speed: 1400 px/s straight line towards mouse cursor (`PROJECTILE_GRAVITY = 0`).
+- Firing: Single LMB click launches the wire instantly from gun muzzle directly at the cursor coordinates.
+- Reeling Speed: 140 px/s (climb with W, descend with S while airborne)
+- Socket Highlight: Sockets within 3 squares ($96\text{ px}$) highlight automatically.
 - Mid-Air Pendulum Constraint: Radial distance constraint eliminates outward radial velocity component, enforcing circular pendulum swinging.
 - Wire Cut: Right Mouse Button (RMB) cleanly disconnects the wire with zero jump boost, preserving tangential momentum.
-- Ground Auto-Detachment: Walking on the ground beyond 280 px automatically snaps the plug out.
-- Visuals: Catenary/Bezier curve sag when slack, straight glowing line under tension with animated electrical pulses.
+- Ground Auto-Detachment: Walking on the ground beyond 3 squares automatically snaps the plug out.
+- Visuals: Straight glowing line under tension with animated electrical pulses. Recoil gun firing stance triggers on shot.
 
 ### 3.3. Circuit System & Grid Logic (`CircuitSystem.js`)
 - Cardinal Port Architecture: Defined as a 4-element boolean array `[Top, Right, Bottom, Left]`:
@@ -158,6 +169,37 @@ Kood-game-jam-2026/
 - Trajectory Path Tracer & Apex Marker: 180-frame historical trail rendering the exact parabolic curve of jumps and pendulum swings, marking jump apex height and horizontal distance span.
 - Interactive Distance Ruler: Hold `Shift` + `Right-Click` and drag to measure horizontal distance (`dx`), vertical height difference (`dy`), and Euclidean distance (`dist`) in pixels.
 - Live Physics Tuning Sidebar: Floating DOM drawer with live two-way bound sliders for walk/run speeds, acceleration, friction, ground jump, wall jump up/outward impulses, wall slide speeds, gravity, wire throw speeds, and reel speed. Includes a `[Copy Config]` button that exports calibrated JavaScript constants to clipboard.
+
+### 3.7. Pipe Flow System & LDtk Grid Lockdown (`PipeSystem.js` & `LDtkLevel.js`)
+- Universal LDtk Entity Pivot Calculation:
+  ```javascript
+  const topLeftX = worldX + ent.px[0] - (pivotX * w);
+  const topLeftY = worldY + ent.px[1] - (pivotY * h);
+  const centerX = topLeftX + w / 2;
+  const centerY = topLeftY + h / 2;
+  ```
+  - For entities with pivot `[0.5, 0.5]`, `ent.px` is already the entity's center. No `+ 16` offset is added.
+  - Sockets and circuit nodes receive `(centerX, centerY)`, while sprites drawing from top-left (`Drone`, `Logic_Gate`, `Light_Box`) receive `(topLeftX, topLeftY)`.
+  - Every entity occupies strictly one single $32\times32\text{ px}$ grid cube, centered precisely where placed in LDtk.
+- Pipe Flow Network Engine (`PipeSystem.js`):
+  - Extracts and renders all 19 tiles on the `Pipes` layer from `map.ldtk` (`circuits_sheet`).
+  - Classifies conduits into vertical (`[96, 64]`), horizontal (`[0, 64]`, `[32, 96]`), and corner bends (`[64, 128]` for Right/Bottom, `[0, 128]` for Left/Bottom).
+- Multi-Layer Visual Pipeline ("With Lights and Everything"):
+  - Base metal conduit casing from `circuits.png`.
+  - Molten golden lumen channel (`#ffba00`) with ultra-bright filament core (`#fff8cc`) when energized.
+  - Continuous traveling high-voltage dashed plasma pulses (`#ffffff` / `#ffe066`) streaming continuously along each pipe in the direction of power flow.
+  - Seamless 90-degree corner light rounding without sprite clipping.
+  - Tactile micro-sparks and coupling joint indicator LEDs.
+  - Recessed armored wall conduit bridge spanning Chamber 1 to Chamber 2 across the vertical hazard shaft.
+- Facility Circuit Propagation & Puzzle Logic:
+  - Ceiling Power Feed: Column 6 (`1472, 0..96`) is permanently energized by the facility generator.
+  - Dial 0 (CORNER at 1488, 144): Connects Top to Right, feeding the horizontal exit pipe and the wall conduit to Chamber 2.
+  - Dial Bus (Dials 1..4): Daisy-chained power bus feeding into `OR Gate 1` and `OR Gate 2`.
+  - Logic Gates: `AND Gate` activates when both `OR Gate 1` and `OR Gate 2` conditions are satisfied.
+  - Door Trunk Line: Transmits electricity down into the status light box and blast door.
+  - Light Box: Features a heavy-duty metallic box (`circuits.png` `[0, 160]`) with a dual-state status diode (Crimson Red with slow breathing pulse when locked; radiant Cyber Green with downward ambient glow when online).
+  - Solid Blast Door: `LDtkLevel.getSolidColliders()` physically blocks player passage until the circuit puzzle is solved and the door slides open.
+  - Dial Rotation Access: Pressing [E] rotates a dial both when tethered via wire and when standing adjacent to the dial (within 42px).
 
 ---
 
@@ -235,5 +277,7 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 - 2026-11-03: Refined wall run mechanics: player automatically sticks to wall-runnable surfaces upon contact without requiring A or D input; pressing either Space or S allows jumping off the wall. Added contextual HUD prompt and updated InputManager with downPressed support.
 - 2026-11-03: Updated wall sliding and jumping controls per feedback: pressing/holding S accelerates slide down to 320 px/s without jumping; only Space executes the wall jump. Updated HUD prompt to [Space] Wall Jump | Hold [S] Fast Slide and footer controls legend.
 - 2026-11-03: Implemented isolated DevTools & Debug System (DevTools.js): gated by IS_DEV environment check, toggleable via `~` or F1. Features real-time kinematics telemetry HUD, hitbox and socket constraint gizmos, jump trajectory and apex tracer, Shift+RMB interactive pixel distance ruler, and live DOM physics tuning panel with clipboard preset export.
+- 2026-11-07: Completed Stage 1 & 2: Locked player physical bounds strictly to 32x32 px with HD 192x192 supersampled sprite rendering (Hero-v2.png), deterministic 2-square jump apex and span kinematics, DevTools calibrated in squares, authentic 32x32 animated pixel-art drones (Drones +.png), rotatable dials (Circuits(4).png), logic gates (Gates.png), and sockets.
+- 2026-11-07: Completed Stage 3: Resolved LDtk entity pivot math (topLeft = worldX + px - pivot * w; center = topLeft + w/2), locking all dials, sockets, anchors, chargers, drones, gates, and light boxes into single 32px cubes. Built PipeSystem.js parsing all 19 tiles from map.ldtk Pipes layer, rendering molten golden lumen illumination, continuous traveling light pulses streaming in flow direction, smooth 90-degree corner light rounding, micro-sparks, dynamic circuit power propagation from ceiling generator through dials and logic gates (OR, AND) to the exit blast door and status light box, with physical solid door collider blocking player passage when closed.
 
 

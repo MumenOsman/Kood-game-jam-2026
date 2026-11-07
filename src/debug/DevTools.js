@@ -60,6 +60,15 @@ export class DevTools {
         const m = this.movement;
         const w = this.wireSystem;
         return {
+            jumpHeightSquares: m.jumpHeightSquares,
+            jumpSpanSquares: m.jumpSpanSquares,
+            walkSpeedSquares: m.walkSpeedSquares,
+            runSpeedSquares: m.runSpeedSquares,
+            wallJumpUpSquares: m.wallJumpUpSquares,
+            wallJumpOutSquares: m.wallJumpOutSquares,
+            wireLengthSquares: w.wireLengthSquares,
+            instantLocomotion: m.instantLocomotion,
+            variableJumpHeight: m.variableJumpHeight,
             WALK_SPEED: m.WALK_SPEED,
             RUN_SPEED: m.RUN_SPEED,
             GROUND_ACCEL: m.GROUND_ACCEL,
@@ -283,12 +292,14 @@ export class DevTools {
             ctx.fillStyle = '#ffff00';
             ctx.font = 'bold 10px monospace';
             const jumpHeight = Math.round(this.lastJumpOrigin.y - apex.y);
-            ctx.fillText(`APEX: ${jumpHeight}px`, apex.x + 18, apex.y + 4);
+            const jumpHeightSq = (jumpHeight / 32).toFixed(1);
+            ctx.fillText(`APEX: ${jumpHeightSq} sq (${jumpHeight}px)`, apex.x + 18, apex.y + 4);
         }
 
         // Jump distance span marker
         if (this.lastJumpOrigin && this.lastJumpLanding) {
             const span = Math.round(Math.abs(this.lastJumpLanding.x - this.lastJumpOrigin.x));
+            const spanSq = (span / 32).toFixed(1);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
@@ -300,7 +311,7 @@ export class DevTools {
             ctx.fillStyle = '#ffffff';
             ctx.font = '9px monospace';
             const midX = (this.lastJumpOrigin.x + this.lastJumpLanding.x) / 2;
-            ctx.fillText(`SPAN: ${span}px`, midX - 25, this.lastJumpLanding.y + 22);
+            ctx.fillText(`SPAN: ${spanSq} sq (${span}px)`, midX - 35, this.lastJumpLanding.y + 22);
         }
 
         ctx.restore();
@@ -309,6 +320,29 @@ export class DevTools {
     _renderHitboxes(ctx) {
         ctx.save();
         ctx.lineWidth = 1.5;
+
+        // 0. Strict 32px Tile Grid Overlay
+        if (this.showHitboxes && this.level) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.lineWidth = 1;
+            const startX = Math.floor(Math.max(0, this.camera ? this.camera.x : 0) / 32) * 32;
+            const endX = startX + 704;
+            const h = this.level.height || 320;
+            for (let gx = startX; gx <= endX; gx += 32) {
+                ctx.beginPath();
+                ctx.moveTo(gx, 0);
+                ctx.lineTo(gx, h);
+                ctx.stroke();
+            }
+            for (let gy = 0; gy <= h; gy += 32) {
+                ctx.beginPath();
+                ctx.moveTo(startX, gy);
+                ctx.lineTo(endX, gy);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
 
         // 1. Level Solid Colliders
         if (this.level) {
@@ -485,7 +519,10 @@ export class DevTools {
         // Measurement badge
         const midX = (s.x + e.x) / 2;
         const midY = (s.y + e.y) / 2;
-        const label = `DX: ${dx}px | DY: ${dy}px | DIST: ${dist}px`;
+        const dxSq = (dx / 32).toFixed(1);
+        const dySq = (dy / 32).toFixed(1);
+        const distSq = (dist / 32).toFixed(1);
+        const label = `DX: ${dxSq}sq (${dx}px) | DY: ${dySq}sq (${dy}px) | DIST: ${distSq}sq (${dist}px)`;
 
         ctx.font = 'bold 11px monospace';
         const tw = ctx.measureText(label).width;
@@ -509,8 +546,8 @@ export class DevTools {
         ctx.save();
         const boxX = 14;
         const boxY = 14;
-        const boxW = 270;
-        const boxH = 210;
+        const boxW = 310;
+        const boxH = 215;
 
         // Background card
         ctx.fillStyle = 'rgba(14, 18, 24, 0.92)';
@@ -537,21 +574,25 @@ export class DevTools {
         ctx.fillStyle = '#b0bec5';
         ctx.fillText('STATE:', boxX + 10, lineY);
         ctx.fillStyle = '#00ffcc';
-        ctx.fillText(stateStr, boxX + 75, lineY);
+        ctx.fillText(stateStr, boxX + 80, lineY);
         lineY += step;
 
         // Velocities
         ctx.fillStyle = '#b0bec5';
         ctx.fillText('VELOCITY:', boxX + 10, lineY);
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`vx: ${p.vx.toFixed(1)}  vy: ${p.vy.toFixed(1)}`, boxX + 75, lineY);
+        const vxSq = (p.vx / 32).toFixed(1);
+        const vySq = (p.vy / 32).toFixed(1);
+        ctx.fillText(`vx:${p.vx.toFixed(0)} (${vxSq}sq/s)  vy:${p.vy.toFixed(0)} (${vySq}sq/s)`, boxX + 80, lineY);
         lineY += step;
 
         // Position
         ctx.fillStyle = '#b0bec5';
         ctx.fillText('POS (X,Y):', boxX + 10, lineY);
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`x: ${Math.round(p.x)}  y: ${Math.round(p.y)}`, boxX + 75, lineY);
+        const pxSq = (p.x / 32).toFixed(1);
+        const pySq = (p.y / 32).toFixed(1);
+        ctx.fillText(`x:${Math.round(p.x)} (${pxSq}sq)  y:${Math.round(p.y)} (${pySq}sq)`, boxX + 80, lineY);
         lineY += step;
 
         // Timers
@@ -561,11 +602,11 @@ export class DevTools {
         const wallCoyoteMs = Math.round(p.wallCoyoteTimer * 1000);
         const lockMs = Math.round(p.wallJumpLockTimer * 1000);
         ctx.fillStyle = coyoteMs > 0 ? '#00e676' : '#78909c';
-        ctx.fillText(`coy:${coyoteMs}ms`, boxX + 75, lineY);
+        ctx.fillText(`coy:${coyoteMs}ms`, boxX + 80, lineY);
         ctx.fillStyle = wallCoyoteMs > 0 ? '#00e5ff' : '#78909c';
-        ctx.fillText(`wcoy:${wallCoyoteMs}ms`, boxX + 140, lineY);
+        ctx.fillText(`wcoy:${wallCoyoteMs}ms`, boxX + 145, lineY);
         ctx.fillStyle = lockMs > 0 ? '#ffaa00' : '#78909c';
-        ctx.fillText(`lock:${lockMs}ms`, boxX + 215, lineY);
+        ctx.fillText(`lock:${lockMs}ms`, boxX + 220, lineY);
         lineY += step;
 
         // Wire status
@@ -573,10 +614,11 @@ export class DevTools {
         ctx.fillText('WIRE:', boxX + 10, lineY);
         if (p.isTethered && p.tetherSocket) {
             ctx.fillStyle = '#ffaa00';
-            ctx.fillText(`L:${Math.round(p.tetherLength)}px (${p.tetherSocket.id})`, boxX + 75, lineY);
+            const wireSq = (p.tetherLength / 32).toFixed(1);
+            ctx.fillText(`L:${Math.round(p.tetherLength)}px (${wireSq}sq) [${p.tetherSocket.id}]`, boxX + 80, lineY);
         } else {
             ctx.fillStyle = '#78909c';
-            ctx.fillText('DISCONNECTED', boxX + 75, lineY);
+            ctx.fillText('DISCONNECTED', boxX + 80, lineY);
         }
         lineY += step;
 
@@ -584,21 +626,23 @@ export class DevTools {
         ctx.fillStyle = '#b0bec5';
         ctx.fillText('BATTERY:', boxX + 10, lineY);
         ctx.fillStyle = p.battery > 50 ? '#00e676' : p.battery > 25 ? '#ffaa00' : '#ff1744';
-        ctx.fillText(`${p.battery.toFixed(1)}%`, boxX + 75, lineY);
+        ctx.fillText(`${p.battery.toFixed(1)}%`, boxX + 80, lineY);
         lineY += step;
 
         // Cursor world coordinates
         ctx.fillStyle = '#b0bec5';
         ctx.fillText('MOUSE (W):', boxX + 10, lineY);
         ctx.fillStyle = '#ffff00';
-        ctx.fillText(`x: ${Math.round(this.mouseWorldX)}  y: ${Math.round(this.mouseWorldY)}`, boxX + 75, lineY);
+        const mxSq = (this.mouseWorldX / 32).toFixed(1);
+        const mySq = (this.mouseWorldY / 32).toFixed(1);
+        ctx.fillText(`x:${Math.round(this.mouseWorldX)} (${mxSq}sq)  y:${Math.round(this.mouseWorldY)} (${mySq}sq)`, boxX + 80, lineY);
         lineY += step;
 
         // Quick tip
         ctx.fillStyle = '#78909c';
         ctx.font = '9px monospace';
         ctx.fillText('Shift+RMB Drag: Measure distance', boxX + 10, lineY + 6);
-        ctx.fillText('F1 / ~: Toggle | Sliders on left', boxX + 10, lineY + 18);
+        ctx.fillText('F1 / ~: Toggle | Sliders in Squares on left', boxX + 10, lineY + 18);
 
         ctx.restore();
     }
@@ -617,7 +661,7 @@ export class DevTools {
                 position: fixed;
                 top: 12px;
                 left: 12px;
-                width: 320px;
+                width: 350px;
                 max-height: calc(100vh - 24px);
                 background: rgba(14, 18, 24, 0.95);
                 border: 1px solid #2a3442;
@@ -681,16 +725,17 @@ export class DevTools {
             }
             .dt-label {
                 color: #a0aec0;
-                width: 140px;
+                width: 135px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
             .dt-val {
-                width: 45px;
+                width: 110px;
                 text-align: right;
                 color: #00e5ff;
                 font-weight: bold;
+                font-size: 10px;
             }
             .dt-slider {
                 flex: 1;
@@ -770,45 +815,58 @@ export class DevTools {
                 </div>
 
                 <div class="dt-section">
-                    <div class="dt-section-title">Horizontal Locomotion</div>
+                    <div class="dt-section-title">Grid Kinematics (Unit: 32px Squares)</div>
+                    <label class="dt-checkbox-row" style="color:#00ffcc; font-weight:bold;">
+                        <input type="checkbox" id="dt_instantLocomotion" checked />
+                        <span>Instant Locomotion (Arcade 0-lag stop)</span>
+                    </label>
+                    <label class="dt-checkbox-row" style="color:#a0aec0;">
+                        <input type="checkbox" id="dt_variableJumpHeight" />
+                        <span>Variable Jump Cut (Space release)</span>
+                    </label>
                     <div class="dt-row">
-                        <span class="dt-label">Walk Speed</span>
-                        <input type="range" class="dt-slider" id="dt_WALK_SPEED" min="60" max="400" step="10" />
-                        <span class="dt-val" id="val_WALK_SPEED"></span>
+                        <span class="dt-label">Jump Apex (sq)</span>
+                        <input type="range" class="dt-slider" id="dt_jumpHeightSquares" min="1.0" max="4.0" step="0.25" />
+                        <span class="dt-val" id="val_jumpHeightSquares"></span>
                     </div>
                     <div class="dt-row">
-                        <span class="dt-label">Run Speed</span>
-                        <input type="range" class="dt-slider" id="dt_RUN_SPEED" min="150" max="600" step="10" />
-                        <span class="dt-val" id="val_RUN_SPEED"></span>
+                        <span class="dt-label">Jump Span (sq)</span>
+                        <input type="range" class="dt-slider" id="dt_jumpSpanSquares" min="1.0" max="5.0" step="0.25" />
+                        <span class="dt-val" id="val_jumpSpanSquares"></span>
                     </div>
                     <div class="dt-row">
-                        <span class="dt-label">Ground Accel</span>
-                        <input type="range" class="dt-slider" id="dt_GROUND_ACCEL" min="400" max="4000" step="100" />
-                        <span class="dt-val" id="val_GROUND_ACCEL"></span>
+                        <span class="dt-label">Walk Speed (sq/s)</span>
+                        <input type="range" class="dt-slider" id="dt_walkSpeedSquares" min="2.0" max="10.0" step="0.5" />
+                        <span class="dt-val" id="val_walkSpeedSquares"></span>
                     </div>
                     <div class="dt-row">
-                        <span class="dt-label">Ground Friction</span>
-                        <input type="range" class="dt-slider" id="dt_GROUND_FRICTION" min="0.5" max="0.98" step="0.02" />
-                        <span class="dt-val" id="val_GROUND_FRICTION"></span>
+                        <span class="dt-label">Run Speed (sq/s)</span>
+                        <input type="range" class="dt-slider" id="dt_runSpeedSquares" min="4.0" max="14.0" step="0.5" />
+                        <span class="dt-val" id="val_runSpeedSquares"></span>
+                    </div>
+                    <div class="dt-row">
+                        <span class="dt-label">Wire Length (sq)</span>
+                        <input type="range" class="dt-slider" id="dt_wireLengthSquares" min="1.0" max="6.0" step="0.5" />
+                        <span class="dt-val" id="val_wireLengthSquares"></span>
+                    </div>
+                    <div class="dt-row">
+                        <span class="dt-label">Wall Jump Up (sq)</span>
+                        <input type="range" class="dt-slider" id="dt_wallJumpUpSquares" min="1.0" max="4.0" step="0.25" />
+                        <span class="dt-val" id="val_wallJumpUpSquares"></span>
+                    </div>
+                    <div class="dt-row">
+                        <span class="dt-label">Wall Jump Out (sq)</span>
+                        <input type="range" class="dt-slider" id="dt_wallJumpOutSquares" min="1.0" max="4.0" step="0.25" />
+                        <span class="dt-val" id="val_wallJumpOutSquares"></span>
                     </div>
                 </div>
 
                 <div class="dt-section">
-                    <div class="dt-section-title">Jump & Wall Jump Kinematics</div>
+                    <div class="dt-section-title">Environmental & Cable Physics</div>
                     <div class="dt-row">
-                        <span class="dt-label">Jump Force</span>
-                        <input type="range" class="dt-slider" id="dt_JUMP_SPEED" min="200" max="800" step="10" />
-                        <span class="dt-val" id="val_JUMP_SPEED"></span>
-                    </div>
-                    <div class="dt-row">
-                        <span class="dt-label">Wall Jump Up</span>
-                        <input type="range" class="dt-slider" id="dt_WALL_JUMP_UP" min="200" max="800" step="10" />
-                        <span class="dt-val" id="val_WALL_JUMP_UP"></span>
-                    </div>
-                    <div class="dt-row">
-                        <span class="dt-label">Wall Jump Out</span>
-                        <input type="range" class="dt-slider" id="dt_WALL_JUMP_OUTWARD" min="150" max="600" step="10" />
-                        <span class="dt-val" id="val_WALL_JUMP_OUTWARD"></span>
+                        <span class="dt-label">Gravity</span>
+                        <input type="range" class="dt-slider" id="dt_GRAVITY" min="600" max="3000" step="50" />
+                        <span class="dt-val" id="val_GRAVITY"></span>
                     </div>
                     <div class="dt-row">
                         <span class="dt-label">Slide Speed</span>
@@ -821,31 +879,7 @@ export class DevTools {
                         <span class="dt-val" id="val_FAST_WALL_SLIDE_SPEED"></span>
                     </div>
                     <div class="dt-row">
-                        <span class="dt-label">Gravity</span>
-                        <input type="range" class="dt-slider" id="dt_GRAVITY" min="600" max="3000" step="50" />
-                        <span class="dt-val" id="val_GRAVITY"></span>
-                    </div>
-                </div>
-
-                <div class="dt-section">
-                    <div class="dt-section-title">Wire & Swing Physics</div>
-                    <div class="dt-row">
-                        <span class="dt-label">Min Throw Speed</span>
-                        <input type="range" class="dt-slider" id="dt_MIN_THROW_SPEED" min="300" max="1500" step="50" />
-                        <span class="dt-val" id="val_MIN_THROW_SPEED"></span>
-                    </div>
-                    <div class="dt-row">
-                        <span class="dt-label">Max Throw Speed</span>
-                        <input type="range" class="dt-slider" id="dt_MAX_THROW_SPEED" min="600" max="2200" step="50" />
-                        <span class="dt-val" id="val_MAX_THROW_SPEED"></span>
-                    </div>
-                    <div class="dt-row">
-                        <span class="dt-label">Max Wire Length</span>
-                        <input type="range" class="dt-slider" id="dt_MAX_WIRE_LENGTH" min="200" max="800" step="20" />
-                        <span class="dt-val" id="val_MAX_WIRE_LENGTH"></span>
-                    </div>
-                    <div class="dt-row">
-                        <span class="dt-label">Reel Speed</span>
+                        <span class="dt-label">Reel Speed (W/S)</span>
                         <input type="range" class="dt-slider" id="dt_REEL_SPEED" min="60" max="500" step="20" />
                         <span class="dt-val" id="val_REEL_SPEED"></span>
                     </div>
@@ -880,22 +914,35 @@ export class DevTools {
             this.showRuler = e.target.checked;
         });
 
-        // Sliders binding
-        this._bindSlider('WALK_SPEED', this.movement);
-        this._bindSlider('RUN_SPEED', this.movement);
-        this._bindSlider('GROUND_ACCEL', this.movement);
-        this._bindSlider('GROUND_FRICTION', this.movement);
+        // Kinematics Mode Checkboxes
+        const instLoco = document.getElementById('dt_instantLocomotion');
+        if (instLoco) {
+            instLoco.checked = this.movement.instantLocomotion;
+            instLoco.addEventListener('change', (e) => {
+                this.movement.instantLocomotion = e.target.checked;
+            });
+        }
+        const varJump = document.getElementById('dt_variableJumpHeight');
+        if (varJump) {
+            varJump.checked = this.movement.variableJumpHeight;
+            varJump.addEventListener('change', (e) => {
+                this.movement.variableJumpHeight = e.target.checked;
+            });
+        }
 
-        this._bindSlider('JUMP_SPEED', this.movement, true); // negative magnitude
-        this._bindSlider('WALL_JUMP_UP', this.movement, true);
-        this._bindSlider('WALL_JUMP_OUTWARD', this.movement);
+        // Sliders calibrated in Squares
+        this._bindSquareSlider('jumpHeightSquares', this.movement, 'sq', 2);
+        this._bindSquareSlider('jumpSpanSquares', this.movement, 'sq', 2);
+        this._bindSquareSlider('walkSpeedSquares', this.movement, 'sq/s', 1);
+        this._bindSquareSlider('runSpeedSquares', this.movement, 'sq/s', 1);
+        this._bindSquareSlider('wireLengthSquares', this.wireSystem, 'sq', 1);
+        this._bindSquareSlider('wallJumpUpSquares', this.movement, 'sq', 2);
+        this._bindSquareSlider('wallJumpOutSquares', this.movement, 'sq', 2);
+
+        // Classical physics sliders
+        this._bindSlider('GRAVITY', this.movement);
         this._bindSlider('MAX_WALL_SLIDE_SPEED', this.movement);
         this._bindSlider('FAST_WALL_SLIDE_SPEED', this.movement);
-        this._bindSlider('GRAVITY', this.movement);
-
-        this._bindSlider('MIN_THROW_SPEED', this.wireSystem);
-        this._bindSlider('MAX_THROW_SPEED', this.wireSystem);
-        this._bindSlider('MAX_WIRE_LENGTH', this.wireSystem);
         this._bindSlider('REEL_SPEED', this.wireSystem);
 
         // Copy button
@@ -906,6 +953,24 @@ export class DevTools {
         // Reset button
         document.getElementById('dtResetBtn').addEventListener('click', () => {
             this._resetToDefaults();
+        });
+    }
+
+    _bindSquareSlider(propName, targetObj, unit = 'sq', decimals = 2) {
+        const slider = document.getElementById(`dt_${propName}`);
+        const valSpan = document.getElementById(`val_${propName}`);
+        if (!slider || !valSpan || !targetObj) return;
+
+        const currentVal = targetObj[propName];
+        slider.value = currentVal;
+        const px = Math.round(currentVal * 32);
+        valSpan.textContent = `${Number(currentVal).toFixed(decimals)} ${unit} (${px}px${unit.includes('/s') ? '/s' : ''})`;
+
+        slider.addEventListener('input', (e) => {
+            const rawVal = parseFloat(e.target.value);
+            targetObj[propName] = rawVal;
+            const px = Math.round(rawVal * 32);
+            valSpan.textContent = `${rawVal.toFixed(decimals)} ${unit} (${px}px${unit.includes('/s') ? '/s' : ''})`;
         });
     }
 
@@ -930,23 +995,22 @@ export class DevTools {
         const m = this.movement;
         const w = this.wireSystem;
         const config = {
-            WALK_SPEED: m.WALK_SPEED,
-            RUN_SPEED: m.RUN_SPEED,
-            GROUND_ACCEL: m.GROUND_ACCEL,
-            GROUND_FRICTION: m.GROUND_FRICTION,
-            JUMP_SPEED: m.JUMP_SPEED,
-            WALL_JUMP_UP: m.WALL_JUMP_UP,
-            WALL_JUMP_OUTWARD: m.WALL_JUMP_OUTWARD,
+            jumpHeightSquares: m.jumpHeightSquares,
+            jumpSpanSquares: m.jumpSpanSquares,
+            walkSpeedSquares: m.walkSpeedSquares,
+            runSpeedSquares: m.runSpeedSquares,
+            wireLengthSquares: w.wireLengthSquares,
+            wallJumpUpSquares: m.wallJumpUpSquares,
+            wallJumpOutSquares: m.wallJumpOutSquares,
+            instantLocomotion: m.instantLocomotion,
+            variableJumpHeight: m.variableJumpHeight,
+            GRAVITY: m.GRAVITY,
             MAX_WALL_SLIDE_SPEED: m.MAX_WALL_SLIDE_SPEED,
             FAST_WALL_SLIDE_SPEED: m.FAST_WALL_SLIDE_SPEED,
-            GRAVITY: m.GRAVITY,
-            MIN_THROW_SPEED: w.MIN_THROW_SPEED,
-            MAX_THROW_SPEED: w.MAX_THROW_SPEED,
-            MAX_WIRE_LENGTH: w.MAX_WIRE_LENGTH,
             REEL_SPEED: w.REEL_SPEED
         };
 
-        const str = `// Calibrated Physics Preset\nconst TUNED_PHYSICS = ${JSON.stringify(config, null, 4)};`;
+        const str = `// Calibrated Grid Kinematics Preset\nconst TUNED_GRID_PHYSICS = ${JSON.stringify(config, null, 4)};`;
         navigator.clipboard.writeText(str).then(() => {
             const toast = document.getElementById('dtCopyToast');
             if (toast) {
@@ -969,12 +1033,24 @@ export class DevTools {
                 this.wireSystem[key] = val;
             }
             if (typeof document !== 'undefined') {
+                const checkbox = document.getElementById(`dt_${key}`);
+                if (checkbox && checkbox.type === 'checkbox') {
+                    checkbox.checked = !!val;
+                }
                 const slider = document.getElementById(`dt_${key}`);
                 const valSpan = document.getElementById(`val_${key}`);
                 if (slider && valSpan) {
-                    const isNeg = val < 0;
-                    slider.value = isNeg ? Math.abs(val) : val;
-                    valSpan.textContent = val;
+                    slider.value = val;
+                    if (key.endsWith('Squares')) {
+                        const unit = key.includes('Speed') ? 'sq/s' : 'sq';
+                        const decimals = key.includes('Speed') ? 1 : 2;
+                        const px = Math.round(val * 32);
+                        valSpan.textContent = `${Number(val).toFixed(decimals)} ${unit} (${px}px${unit.includes('/s') ? '/s' : ''})`;
+                    } else {
+                        const isNeg = val < 0;
+                        slider.value = isNeg ? Math.abs(val) : val;
+                        valSpan.textContent = val;
+                    }
                 }
             }
         }

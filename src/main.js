@@ -3,20 +3,22 @@
  * Bootstrap entry point: initializes core systems, loads assets,
  * registers modular systems with Engine and EventBus, and starts loop.
  */
-import { EventBus } from './core/EventBus.js';
-import { Engine } from './core/Engine.js';
-import { InputManager } from './core/InputManager.js';
-import { Camera } from './core/Camera.js';
-import { AssetLoader } from './core/AssetLoader.js';
+import { EventBus } from './core/EventBus.js?v=20261107_v7';
+import { Engine } from './core/Engine.js?v=20261107_v7';
+import { InputManager } from './core/InputManager.js?v=20261107_v7';
+import { Camera } from './core/Camera.js?v=20261107_v7';
+import { AssetLoader } from './core/AssetLoader.js?v=20261107_v7';
 
-import { Player } from './entities/Player.js';
-import { PlayerMovement } from './modules/PlayerMovement.js';
-import { WireSystem } from './modules/WireSystem.js';
-import { CircuitSystem } from './modules/CircuitSystem.js';
-import { HazardSystem } from './modules/HazardSystem.js';
-import { AnimationController } from './modules/AnimationController.js';
-import { TestRoom } from './levels/TestRoom.js';
-import { HUD } from './ui/HUD.js';
+import { Player } from './entities/Player.js?v=20261107_v7';
+import { PlayerMovement } from './modules/PlayerMovement.js?v=20261107_v7';
+import { WireSystem } from './modules/WireSystem.js?v=20261107_v7';
+import { CircuitSystem } from './modules/CircuitSystem.js?v=20261107_v7';
+import { PipeSystem } from './modules/PipeSystem.js?v=20261107_v7';
+import { HazardSystem } from './modules/HazardSystem.js?v=20261107_v7';
+import { AnimationController } from './modules/AnimationController.js?v=20261107_v7';
+import { TestRoom } from './levels/TestRoom.js?v=20261107_v7';
+import { LDtkLevel } from './levels/LDtkLevel.js?v=20261107_v7';
+import { HUD } from './ui/HUD.js?v=20261107_v7';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
@@ -32,18 +34,45 @@ async function bootstrap() {
 
     // 2. Load Assets (spritesheet and bounds metadata)
     await Promise.all([
-        assetLoader.loadImage('hero_sheet', './assets/sprites/Hero-sprites.png'),
-        assetLoader.loadJSON('hero_meta', './assets/sprites/Hero-sprites.json')
+        assetLoader.loadImage('hero_sheet', './assets/sprites/Hero-v2.png?v=20261107_v7'),
+        assetLoader.loadJSON('hero_meta', './assets/sprites/Hero-v2.json?v=20261107_v7'),
+        assetLoader.loadImage('drones_sheet', './assets/sprites/drones.png?v=20261107_v7'),
+        assetLoader.loadImage('circuits_sheet', './assets/sprites/circuits.png?v=20261107_v7'),
+        assetLoader.loadImage('gates_sheet', './assets/sprites/gates.png?v=20261107_v7'),
+        assetLoader.loadImage('objects_sheet', './assets/sprites/objects.png?v=20261107_v7')
     ]);
 
     // 3. Entity & Level Setup
-    const player = new Player(120, 480);
-    const circuitSystem = new CircuitSystem(eventBus, input, player);
-    const level = new TestRoom(eventBus, circuitSystem);
-    camera.setBounds(0, 0, level.width, level.height);
+    const levelQuery = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('level')
+        : null;
+
+    let level = null;
+    const circuitSystem = new CircuitSystem(eventBus, input, null, { assetLoader });
+
+    if (levelQuery === 'testroom') {
+        level = new TestRoom(eventBus, circuitSystem, { assetLoader });
+        camera.setBounds(0, 0, level.width, level.height);
+    } else {
+        const ldtkLevel = new LDtkLevel(eventBus, circuitSystem, {
+            ldtkPath: './game-levels/map.ldtk',
+            basePath: './game-levels/map/simplified/',
+            assetLoader: assetLoader
+        });
+        await ldtkLevel.load();
+        level = ldtkLevel;
+        camera.setRoomMode(level.roomWidth, level.roomHeight, level.totalRooms);
+    }
+
+    const player = new Player(level.spawnPoint.x, level.spawnPoint.y);
+    circuitSystem.player = player;
+
     camera.snapTo(player.x, player.y);
 
     // 4. Modules
+    const pipeSystem = new PipeSystem(eventBus, assetLoader, circuitSystem, level);
+    pipeSystem.init(assetLoader, level, circuitSystem);
+
     const movement = new PlayerMovement(eventBus, input, player, level);
     const wireSystem = new WireSystem(eventBus, input, player, level);
     const hazardSystem = new HazardSystem(eventBus, player, level);
@@ -87,7 +116,7 @@ async function bootstrap() {
     let devTools = null;
     if (IS_DEV) {
         try {
-            const { DevTools } = await import('./debug/DevTools.js');
+            const { DevTools } = await import('./debug/DevTools.js?v=20261107_v7');
             devTools = new DevTools({
                 engine,
                 eventBus,
@@ -97,6 +126,7 @@ async function bootstrap() {
                 movement,
                 wireSystem,
                 circuitSystem,
+                pipeSystem,
                 hazardSystem,
                 level,
                 hud,
@@ -115,14 +145,18 @@ async function bootstrap() {
             movement.init(eng);
             wireSystem.init(eng);
             circuitSystem.init(eng);
+            pipeSystem.init(assetLoader, level, circuitSystem);
             hazardSystem.init(eng);
         },
         update(dt) {
             // Level entities update
-            level.update(dt);
+            level.update(dt, player);
 
             // Circuit rotation & power propagation
             circuitSystem.update(dt);
+
+            // Pipe flow system energy animation & lights
+            pipeSystem.update(dt);
 
             // Electrified hazards & shock detection
             hazardSystem.update(dt);
@@ -136,8 +170,9 @@ async function bootstrap() {
             // Fall-out-of-bounds safety respawn
             if (player.y > level.height + 50) {
                 wireSystem.disconnectWire();
-                player.x = 120;
-                player.y = 480;
+                const roomIdx = level.activeRoomIndex !== undefined ? level.activeRoomIndex : 0;
+                player.x = roomIdx * (level.roomWidth || 640) + 64;
+                player.y = 192;
                 player.vx = 0;
                 player.vy = 0;
                 hud.setMessage('Unit recovered to nearest safety platform.');
@@ -146,8 +181,8 @@ async function bootstrap() {
             // Sprite animation timing
             animation.update(dt, player);
 
-            // Smooth camera tracking
-            camera.follow(player, player.facing * 80, -30);
+            // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
+            camera.follow(player);
             camera.update();
 
             // HUD
@@ -166,6 +201,7 @@ async function bootstrap() {
             camera.applyTransform(ctx);
 
             level.renderBackground(ctx);
+            pipeSystem.render(ctx);
             circuitSystem.render(ctx);
             level.renderForeground(ctx);
             hazardSystem.render(ctx);

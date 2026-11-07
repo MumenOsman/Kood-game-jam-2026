@@ -150,8 +150,6 @@ export class HUD {
             }
         } else if (p.isWallSliding) {
             prompt = '[Space] Wall Jump  |  Hold [S] Fast Slide';
-        } else if (p.isAiming) {
-            prompt = `Aiming... Power: ${Math.round(p.aimPower * 100)}%`;
         }
 
         if (prompt) {

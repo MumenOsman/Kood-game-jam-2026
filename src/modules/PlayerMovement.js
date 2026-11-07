@@ -12,21 +12,28 @@ export class PlayerMovement {
         this.player = player;
         this.level = level;
 
-        // Kinematics tuning constants
-        this.WALK_SPEED = 190;
-        this.RUN_SPEED = 330;
-        this.CRAWL_SPEED = 110; // Emergency depleted speed
-        this.GROUND_ACCEL = 1800;
-        this.AIR_ACCEL = 1200;
-        this.GROUND_FRICTION = 0.82;
-        this.AIR_DRAG = 0.985;
+        // Kinematics tuning in grid squares (32px per square)
+        this.jumpHeightSquares = 2.0; // Strictly 2 squares (64px) apex
+        this.jumpSpanSquares = 2.0;   // Strictly 2 squares (64px) horizontal landing span
+        this.walkSpeedSquares = 5.0;  // 5 squares/sec = 160 px/s
+        this.runSpeedSquares = 8.0;   // 8 squares/sec = 256 px/s
+        this.crawlSpeedSquares = 2.5; // Emergency depleted speed = 80 px/s
+        this.wallJumpUpSquares = 2.0;
+        this.wallJumpOutSquares = 2.0;
+        this.tetherJumpUpSquares = 2.0;
+        this.tetherJumpOutSquares = 2.0;
+
+        // Kinematics flags (Option 1 Arcade deterministic mode)
+        this.instantLocomotion = true;   // Instant ground response (0 accel ramp, 0 slide) & deterministic jump span
+        this.variableJumpHeight = false; // Fixed deterministic jump height (Space tap reaches full 2 squares)
+
+        // Physics constants
         this.GRAVITY = 1400;
         this.MAX_FALL_SPEED = 850;
-        this.JUMP_SPEED = -520;
-        this.LOW_POWER_JUMP_SPEED = -470;
-        this.HOP_SPEED = -280; // Emergency hop when battery is 0%
-        this.TETHER_JUMP_UP = -460;
-        this.TETHER_JUMP_HORIZONTAL = 280;
+        this.GROUND_ACCEL = 2500;
+        this.AIR_ACCEL = 1400;
+        this.GROUND_FRICTION = 0.82;
+        this.AIR_DRAG = 0.985;
 
         // Energy consumption tuning constants (subtle rates)
         this.DRAIN_WALK = 0.5; // % per second while walking
@@ -49,6 +56,77 @@ export class PlayerMovement {
         this.WALL_JUMP_OUTWARD = 340; // Horizontal impulse away from wall (px/s)
         this.WALL_COYOTE_TIME = 0.10; // 100ms grace window after leaving wall
         this.WALL_JUMP_LOCK_TIME = 0.15; // 150ms directional lock to preserve jump arc
+    }
+
+    get TILE_SIZE() { return 32; }
+
+    get WALK_SPEED() { return this.walkSpeedSquares * 32; }
+    set WALK_SPEED(v) { this.walkSpeedSquares = Math.round((v / 32) * 10) / 10; }
+
+    get RUN_SPEED() { return this.runSpeedSquares * 32; }
+    set RUN_SPEED(v) { this.runSpeedSquares = Math.round((v / 32) * 10) / 10; }
+
+    get CRAWL_SPEED() { return this.crawlSpeedSquares * 32; }
+    set CRAWL_SPEED(v) { this.crawlSpeedSquares = Math.round((v / 32) * 10) / 10; }
+
+    /**
+     * Discrete Euler jump launch velocity required to reach exactly jumpHeightSquares apex
+     */
+    get JUMP_SPEED() {
+        const h = this.jumpHeightSquares * 32;
+        const dt = 1 / 60;
+        const term = (this.GRAVITY * dt) / 2;
+        return -(term + Math.sqrt(term * term + 2 * this.GRAVITY * h));
+    }
+    set JUMP_SPEED(v) {
+        const u = Math.abs(v);
+        const dt = 1 / 60;
+        const h = (u * u - this.GRAVITY * dt * u) / (2 * this.GRAVITY);
+        this.jumpHeightSquares = Math.max(0.5, Math.round((h / 32) * 10) / 10);
+    }
+
+    /**
+     * Estimated airborne hang time from ground to ground apex and back
+     */
+    get JUMP_AIR_TIME() {
+        return (2 * Math.abs(this.JUMP_SPEED)) / this.GRAVITY;
+    }
+
+    /**
+     * Horizontal air speed required so full jump spans exactly jumpSpanSquares
+     */
+    get JUMP_HORIZONTAL_SPEED() {
+        return (this.jumpSpanSquares * 32) / Math.max(0.01, this.JUMP_AIR_TIME);
+    }
+
+    get WALL_JUMP_UP() {
+        const h = this.wallJumpUpSquares * 32;
+        const dt = 1 / 60;
+        const term = (this.GRAVITY * dt) / 2;
+        return -(term + Math.sqrt(term * term + 2 * this.GRAVITY * h));
+    }
+    set WALL_JUMP_UP(v) {
+        const u = Math.abs(v);
+        const dt = 1 / 60;
+        const h = (u * u - this.GRAVITY * dt * u) / (2 * this.GRAVITY);
+        this.wallJumpUpSquares = Math.max(0.5, Math.round((h / 32) * 10) / 10);
+    }
+
+    get WALL_JUMP_OUTWARD() {
+        const airTime = (2 * Math.abs(this.WALL_JUMP_UP)) / this.GRAVITY;
+        return (this.wallJumpOutSquares * 32) / Math.max(0.01, airTime);
+    }
+    set WALL_JUMP_OUTWARD(v) {
+        const airTime = (2 * Math.abs(this.WALL_JUMP_UP)) / this.GRAVITY;
+        this.wallJumpOutSquares = Math.round(((v * airTime) / 32) * 10) / 10;
+    }
+
+    get TETHER_JUMP_UP() {
+        return this.JUMP_SPEED;
+    }
+
+    get TETHER_JUMP_HORIZONTAL() {
+        return this.JUMP_HORIZONTAL_SPEED;
     }
 
     init(engine) {
@@ -211,7 +289,7 @@ export class PlayerMovement {
             return;
         }
 
-        // 4. Horizontal Acceleration & Max Speed
+        // 4. Horizontal Locomotion & Max Speed
         // Low power disables sprinting; depleted power reduces to emergency crawl
         const canRun = !p.isLowPower && !p.isDepleted;
         const isRunning = canRun && this.input.isRunning;
@@ -222,34 +300,55 @@ export class PlayerMovement {
         }
 
         const targetSpeed = (isRunning ? this.RUN_SPEED : baseWalkSpeed) * horizontalIntent;
-        const accel = p.isGrounded ? this.GROUND_ACCEL : this.AIR_ACCEL;
 
-        if (horizontalIntent !== 0) {
-            // Subtle continuous locomotion battery drain while moving
+        if (this.instantLocomotion) {
+            // ARCADE DETERMINISTIC LOCOMOTION (Brawlhalla style)
             if (p.isGrounded) {
-                const drainRate = isRunning ? this.DRAIN_RUN : this.DRAIN_WALK;
-                p.drainBattery(drainRate * dt);
-                this.eventBus.emit('BATTERY_CHANGED', p.battery);
-            }
-
-            if (Math.sign(p.vx) !== horizontalIntent) {
-                // Snappy turn-around
-                p.vx += horizontalIntent * accel * 1.5 * dt;
+                // Instant crisp response, 0 lag, instant stop
+                p.vx = targetSpeed;
+                if (horizontalIntent !== 0) {
+                    const drainRate = isRunning ? this.DRAIN_RUN : this.DRAIN_WALK;
+                    p.drainBattery(drainRate * dt);
+                    this.eventBus.emit('BATTERY_CHANGED', p.battery);
+                }
             } else {
-                p.vx += horizontalIntent * accel * dt;
-            }
-
-            // Cap at target speed
-            if (Math.abs(p.vx) > Math.abs(targetSpeed)) {
-                p.vx = Math.sign(p.vx) * Math.max(Math.abs(targetSpeed), Math.abs(p.vx) * 0.95);
+                // In air: horizontal speed is locked to JUMP_HORIZONTAL_SPEED to guarantee 2-tile span
+                if (p.wallJumpLockTimer <= 0) {
+                    if (horizontalIntent !== 0) {
+                        p.vx = horizontalIntent * this.JUMP_HORIZONTAL_SPEED;
+                    } else {
+                        // In mid-air with no directional key, decay cleanly
+                        p.vx *= Math.pow(this.AIR_DRAG, dt * 60);
+                        if (Math.abs(p.vx) < 5) p.vx = 0;
+                    }
+                }
             }
         } else {
-            // Apply friction
-            if (p.isGrounded) {
-                p.vx *= Math.pow(this.GROUND_FRICTION, dt * 60);
-                if (Math.abs(p.vx) < 2) p.vx = 0;
+            // Classical momentum & acceleration ramp mode
+            const accel = p.isGrounded ? this.GROUND_ACCEL : this.AIR_ACCEL;
+            if (horizontalIntent !== 0) {
+                if (p.isGrounded) {
+                    const drainRate = isRunning ? this.DRAIN_RUN : this.DRAIN_WALK;
+                    p.drainBattery(drainRate * dt);
+                    this.eventBus.emit('BATTERY_CHANGED', p.battery);
+                }
+
+                if (Math.sign(p.vx) !== horizontalIntent) {
+                    p.vx += horizontalIntent * accel * 1.5 * dt;
+                } else {
+                    p.vx += horizontalIntent * accel * dt;
+                }
+
+                if (Math.abs(p.vx) > Math.abs(targetSpeed)) {
+                    p.vx = Math.sign(p.vx) * Math.max(Math.abs(targetSpeed), Math.abs(p.vx) * 0.95);
+                }
             } else {
-                p.vx *= Math.pow(this.AIR_DRAG, dt * 60);
+                if (p.isGrounded) {
+                    p.vx *= Math.pow(this.GROUND_FRICTION, dt * 60);
+                    if (Math.abs(p.vx) < 2) p.vx = 0;
+                } else {
+                    p.vx *= Math.pow(this.AIR_DRAG, dt * 60);
+                }
             }
         }
 
@@ -257,9 +356,9 @@ export class PlayerMovement {
         if (p.jumpBufferTimer > 0 && p.coyoteTimer > 0) {
             let jumpVel = this.JUMP_SPEED;
             if (p.isDepleted) {
-                jumpVel = this.HOP_SPEED;
+                jumpVel = this.JUMP_SPEED * 0.5;
             } else if (p.isLowPower) {
-                jumpVel = this.LOW_POWER_JUMP_SPEED;
+                jumpVel = this.JUMP_SPEED * 0.75;
             }
 
             p.vy = jumpVel;
@@ -267,14 +366,24 @@ export class PlayerMovement {
             p.jumpBufferTimer = 0;
             p.isGrounded = false;
 
+            // In arcade locomotion mode, clamp initial horizontal velocity to JUMP_HORIZONTAL_SPEED
+            // so jumping while sprinting does not overshoot the 2-tile span!
+            if (this.instantLocomotion) {
+                if (horizontalIntent !== 0) {
+                    p.vx = horizontalIntent * this.JUMP_HORIZONTAL_SPEED;
+                } else if (Math.abs(p.vx) > this.JUMP_HORIZONTAL_SPEED) {
+                    p.vx = Math.sign(p.vx) * this.JUMP_HORIZONTAL_SPEED;
+                }
+            }
+
             // Deduct jump energy cost
             p.drainBattery(this.COST_JUMP);
             this.eventBus.emit('BATTERY_CHANGED', p.battery);
             this.eventBus.emit('PLAYER_JUMP', { x: p.x, y: p.y });
         }
 
-        // Variable jump height cut when Space is released while moving upwards
-        if (!this.input.isKeyDown('Space') && p.vy < -150) {
+        // Variable jump height cut ONLY when variableJumpHeight is enabled
+        if (this.variableJumpHeight && !this.input.isKeyDown('Space') && p.vy < -150) {
             p.vy *= 0.65;
         }
 
@@ -300,7 +409,7 @@ export class PlayerMovement {
 
         // Apply upward and horizontal leap
         p.vy = this.TETHER_JUMP_UP;
-        p.vx = dir * this.TETHER_JUMP_HORIZONTAL + p.vx * 0.4;
+        p.vx = dir * this.TETHER_JUMP_HORIZONTAL;
         p.facing = dir;
         p.isGrounded = false;
 

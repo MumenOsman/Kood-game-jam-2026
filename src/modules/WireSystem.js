@@ -12,13 +12,13 @@ export class WireSystem {
         this.player = player;
         this.level = level;
 
-        // Constants
-        this.MAX_WIRE_LENGTH = 500;
-        this.MIN_WIRE_LENGTH = 45;
-        this.MIN_THROW_SPEED = 800;
-        this.MAX_THROW_SPEED = 1200;
-        this.PROJECTILE_GRAVITY = 900;
-        this.REEL_SPEED = 180; // px/s for climbing W/S
+        // Constants (Strictly locked to max 3 squares = 96px)
+        this.wireLengthSquares = 3.0; // 3 squares (3 x 32px)
+        this.MIN_WIRE_LENGTH = 20;
+        this.MIN_THROW_SPEED = 1400;
+        this.MAX_THROW_SPEED = 1400; // Straight, snappy projectile speed towards mouse cursor
+        this.PROJECTILE_GRAVITY = 0; // Pure straight trajectory matching mouse aim
+        this.REEL_SPEED = 140; // px/s for climbing W/S
 
         // Plug projectile state
         this.projectile = null; // { x, y, vx, vy, life }
@@ -31,6 +31,14 @@ export class WireSystem {
         this.eventBus.on('REQUEST_WIRE_DETACH', () => {
             this.disconnectWire();
         });
+    }
+
+    get MAX_WIRE_LENGTH() {
+        return this.wireLengthSquares * 32;
+    }
+    set MAX_WIRE_LENGTH(v) {
+        this.wireLengthSquares = Math.round((v / 32) * 10) / 10;
+        if (this.player) this.player.tetherMaxDist = this.wireLengthSquares * 32;
     }
 
     init(engine) {
@@ -76,50 +84,48 @@ export class WireSystem {
     _handleAiming(dt, head) {
         const p = this.player;
 
-        // Only allow aiming if not already tethered and projectile not active
-        if (!p.isTethered && !this.projectile) {
-            if (this.input.isLeftDown) {
-                p.isAiming = true;
-                p.spinAngle += dt * 18;
-                p.aimPower = Math.min(1.0, p.aimPower + dt * 1.5);
+        // Count down shooting recoil animation timer
+        if (p.shootTimer > 0) {
+            p.shootTimer = Math.max(0, p.shootTimer - dt);
+        }
 
-                const dx = this.input.mouseWorld.x - head.x;
-                const dy = this.input.mouseWorld.y - head.y;
-                p.aimAngle = Math.atan2(dy, dx);
-            } else if (p.isAiming) {
-                // Released Left-Click -> Launch projectile!
-                this._launchPlug(head);
-                p.isAiming = false;
-                p.aimPower = 0;
+        // Single click LMB fires wire projectile immediately
+        if (this.input.leftPressedThisFrame && !p.isTethered && !this.projectile) {
+            const dx = this.input.mouseWorld.x - (p.x + p.width / 2);
+            if (Math.abs(dx) > 4) {
+                p.facing = dx >= 0 ? 1 : -1;
             }
-        } else {
-            p.isAiming = false;
-            p.aimPower = 0;
+
+            const muzzle = p.getHeadSocket();
+            const angle = Math.atan2(this.input.mouseWorld.y - muzzle.y, this.input.mouseWorld.x - muzzle.x);
+            p.aimAngle = angle;
+            p.shootTimer = 0.25;
+
+            this._launchPlug(muzzle, angle);
         }
     }
 
-    _launchPlug(head) {
-        const p = this.player;
-        const speed = this.MIN_THROW_SPEED + p.aimPower * (this.MAX_THROW_SPEED - this.MIN_THROW_SPEED);
-        const vx = Math.cos(p.aimAngle) * speed;
-        const vy = Math.sin(p.aimAngle) * speed;
+    _launchPlug(muzzle, angle) {
+        const speed = this.MAX_THROW_SPEED;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
 
         this.projectile = {
-            x: head.x,
-            y: head.y,
+            x: muzzle.x,
+            y: muzzle.y,
             vx: vx,
             vy: vy,
             distanceTraveled: 0
         };
 
-        this.eventBus.emit('WIRE_LAUNCHED', { x: head.x, y: head.y, vx, vy });
+        this.eventBus.emit('WIRE_LAUNCHED', { x: muzzle.x, y: muzzle.y, vx, vy });
     }
 
     _updateProjectile(dt, head) {
         if (!this.projectile) return;
 
         const proj = this.projectile;
-        proj.vy += this.PROJECTILE_GRAVITY * dt;
+        // Fly straight in the aimed direction (zero gravity drop)
         proj.x += proj.vx * dt;
         proj.y += proj.vy * dt;
 
@@ -135,7 +141,7 @@ export class WireSystem {
         const sockets = this.level ? this.level.getSockets() : [];
         for (const sock of sockets) {
             const distToSocket = Math.hypot(proj.x - sock.x, proj.y - sock.y);
-            if (distToSocket <= sock.radius + 14) {
+            if (distToSocket <= sock.radius + 16) {
                 // Latched!
                 this._connectWire(sock);
                 this.projectile = null;
@@ -265,13 +271,7 @@ export class WireSystem {
         const p = this.player;
         const head = p.getHeadSocket();
 
-        // 1. Draw Trajectory Arc while aiming
-        if (p.isAiming) {
-            this._renderAimArc(ctx, head);
-            this._renderSpinningPlug(ctx, head);
-        }
-
-        // 2. Draw Flying Plug Projectile
+        // 1. Draw Flying Plug Projectile
         if (this.projectile) {
             this._renderProjectile(ctx, head);
         }

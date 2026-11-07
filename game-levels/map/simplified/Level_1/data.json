@@ -1,0 +1,68 @@
+{
+	"identifier": "Level_1",
+	"uniqueIdentifer": "8f10ab50-bde0-11f1-b860-a3534b8b5122",
+	"x": 640,
+	"y": 0,
+	"width": 640,
+	"height": 320,
+	"bgColor": "#696A79",
+	"neighbourLevels": [
+		{
+			"levelIid": "98ab4070-bde0-11f1-b860-77bbf91bba19",
+			"dir": "w"
+		},
+		{
+			"levelIid": "fc3405c0-bde0-11f1-a2c7-8fb5e5f1a495",
+			"dir": "e"
+		}
+	],
+	"customFields" : {},
+	"layers": [
+		"Factory2.png",
+		"Test_layer.png",
+		"Pipes.png"
+	],
+	"entities": {
+		"Socket_Anchor": [
+			{
+				"id": "Socket_Anchor",
+				"iid": "f2b4f370-bde0-11f1-a2c7-8f8049b8467a",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 14984818,
+				"customFields" : {}
+			}
+		],
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "df00e4f0-bde0-11f1-a2c7-2503cb59c981",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 112,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Heavy_Drone"
+				}
+			},
+			{
+				"id": "Drone",
+				"iid": "f6c8d890-bde0-11f1-a2c7-c90e5176d647",
+				"layer": "Socket_dials",
+				"x": 336,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone"
+				}
+			}
+		]
+	}
+}

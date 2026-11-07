@@ -1,7 +1,9 @@
 /**
  * Camera.js
- * 2D tracking camera with smooth interpolation (lerping), bounds clamping,
- * and coordinate transform utilities.
+ * 2D tracking camera supporting:
+ * - Room-by-room transitions (Celeste / Metroid style smooth panning).
+ * - Responsive aspect-ratio scaling fitting any display resolution.
+ * - Exact screen-to-world and world-to-screen matrix transformations.
  */
 export class Camera {
     constructor(viewportWidth, viewportHeight) {
@@ -13,59 +15,95 @@ export class Camera {
         this.targetX = 0;
         this.targetY = 0;
 
-        this.smoothness = 0.08; // Higher = tighter, lower = smoother
+        this.smoothness = 0.10; // Glide speed during room transition
 
-        // Bounds
-        this.bounds = {
-            minX: 0,
-            minY: 0,
-            maxX: 5000,
-            maxY: 1200
-        };
+        // Room-by-room mode
+        this.isRoomMode = false;
+        this.roomWidth = 640;
+        this.roomHeight = 320;
+        this.totalRooms = 1;
+        this.currentRoomIndex = 0;
+
+        // Viewport scaling & letterboxing
+        this.scale = 1;
+        this.offsetX = 0;
+        this.offsetY = 0;
+
+        this._computeScale();
     }
 
-    setBounds(minX, minY, maxX, maxY) {
-        this.bounds.minX = minX;
-        this.bounds.minY = minY;
-        this.bounds.maxX = maxX;
-        this.bounds.maxY = maxY;
+    setRoomMode(roomWidth = 640, roomHeight = 320, totalRooms = 3) {
+        this.isRoomMode = true;
+        this.roomWidth = roomWidth;
+        this.roomHeight = roomHeight;
+        this.totalRooms = totalRooms;
+        this.currentRoomIndex = 0;
+        this.targetX = 0;
+        this.targetY = 0;
+        this.x = 0;
+        this.y = 0;
+        this._computeScale();
     }
 
     resize(width, height) {
         this.viewportWidth = width;
         this.viewportHeight = height;
+        this._computeScale();
+    }
+
+    _computeScale() {
+        if (!this.isRoomMode) {
+            this.scale = 1;
+            this.offsetX = 0;
+            this.offsetY = 0;
+            return;
+        }
+
+        // Fit 640x320 room inside current canvas maintaining aspect ratio
+        const scaleX = this.viewportWidth / this.roomWidth;
+        const scaleY = this.viewportHeight / this.roomHeight;
+        this.scale = Math.min(scaleX, scaleY);
+
+        // Center on screen
+        const renderW = this.roomWidth * this.scale;
+        const renderH = this.roomHeight * this.scale;
+        this.offsetX = Math.max(0, (this.viewportWidth - renderW) / 2);
+        this.offsetY = Math.max(0, (this.viewportHeight - renderH) / 2);
     }
 
     /**
-     * Follow an entity target (e.g. player)
-     * @param {{x: number, y: number, width?: number, height?: number}} target 
-     * @param {number} offsetX 
-     * @param {number} offsetY 
+     * Follow player across room boundaries with Celeste-style smooth slide
      */
-    follow(target, offsetX = 0, offsetY = 0) {
-        const targetCenterX = target.x + (target.width ? target.width / 2 : 0) + offsetX;
-        const targetCenterY = target.y + (target.height ? target.height / 2 : 0) + offsetY;
+    follow(target) {
+        if (!this.isRoomMode) {
+            // Free follow mode
+            this.targetX = target.x - this.viewportWidth / 2;
+            this.targetY = target.y - this.viewportHeight / 2;
+            return;
+        }
 
-        this.targetX = targetCenterX - this.viewportWidth / 2;
-        this.targetY = targetCenterY - this.viewportHeight / 2;
-
-        this._clampTarget();
+        // Room tracking: determine which 640x320 room player is in
+        const room = Math.max(0, Math.min(this.totalRooms - 1, Math.floor(target.x / this.roomWidth)));
+        this.currentRoomIndex = room;
+        this.targetX = room * this.roomWidth;
+        this.targetY = 0;
     }
 
     snapTo(x, y) {
-        this.targetX = x - this.viewportWidth / 2;
-        this.targetY = y - this.viewportHeight / 2;
-        this._clampTarget();
-        this.x = this.targetX;
-        this.y = this.targetY;
-    }
+        if (this.isRoomMode) {
+            const room = Math.max(0, Math.min(this.totalRooms - 1, Math.floor(x / this.roomWidth)));
+            this.currentRoomIndex = room;
+            this.targetX = room * this.roomWidth;
+            this.targetY = 0;
+            this.x = this.targetX;
+            this.y = this.targetY;
+            return;
+        }
 
-    _clampTarget() {
-        const maxScrollX = Math.max(this.bounds.minX, this.bounds.maxX - this.viewportWidth);
-        const maxScrollY = Math.max(this.bounds.minY, this.bounds.maxY - this.viewportHeight);
-
-        this.targetX = Math.max(this.bounds.minX, Math.min(this.targetX, maxScrollX));
-        this.targetY = Math.max(this.bounds.minY, Math.min(this.targetY, maxScrollY));
+        this.x = x - this.viewportWidth / 2;
+        this.y = y - this.viewportHeight / 2;
+        this.targetX = this.x;
+        this.targetY = this.y;
     }
 
     update() {
@@ -75,6 +113,10 @@ export class Camera {
 
     applyTransform(ctx) {
         ctx.save();
+        if (this.isRoomMode) {
+            ctx.translate(this.offsetX, this.offsetY);
+            ctx.scale(this.scale, this.scale);
+        }
         ctx.translate(-Math.round(this.x), -Math.round(this.y));
     }
 
@@ -83,11 +125,22 @@ export class Camera {
     }
 
     screenToWorld(sx, sy) {
-        return { x: sx + this.x, y: sy + this.y };
+        if (!this.isRoomMode) {
+            return { x: sx + this.x, y: sy + this.y };
+        }
+        return {
+            x: (sx - this.offsetX) / this.scale + this.x,
+            y: (sy - this.offsetY) / this.scale + this.y
+        };
     }
 
     worldToScreen(wx, wy) {
-        return { x: wx - this.x, y: wy - this.y };
+        if (!this.isRoomMode) {
+            return { x: wx - this.x, y: wy - this.y };
+        }
+        return {
+            x: (wx - this.x) * this.scale + this.offsetX,
+            y: (wy - this.y) * this.scale + this.offsetY
+        };
     }
 }
-

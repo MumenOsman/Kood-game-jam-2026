@@ -89,7 +89,15 @@ export class InputManager {
         this.mouseScreen.x = (e.clientX - rect.x) * scaleX;
         this.mouseScreen.y = (e.clientY - rect.y) * scaleY;
 
-        if (this.camera) {
+        this._syncWorldMouse();
+    }
+
+    _syncWorldMouse() {
+        if (this.camera && typeof this.camera.screenToWorld === 'function') {
+            const world = this.camera.screenToWorld(this.mouseScreen.x, this.mouseScreen.y);
+            this.mouseWorld.x = world.x;
+            this.mouseWorld.y = world.y;
+        } else if (this.camera) {
             this.mouseWorld.x = this.mouseScreen.x + this.camera.x;
             this.mouseWorld.y = this.mouseScreen.y + this.camera.y;
         } else {
@@ -110,10 +118,7 @@ export class InputManager {
         this.rightReleasedThisFrame = false;
 
         // Keep mouseWorld synced with moving camera
-        if (this.camera) {
-            this.mouseWorld.x = this.mouseScreen.x + this.camera.x;
-            this.mouseWorld.y = this.mouseScreen.y + this.camera.y;
-        }
+        this._syncWorldMouse();
     }
 
     // Helper query methods

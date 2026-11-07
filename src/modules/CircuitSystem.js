@@ -41,19 +41,20 @@ export const NODE_DESIGNS = {
 };
 
 export class CircuitSystem {
-    constructor(eventBus, inputManager, player) {
+    constructor(eventBus, inputManager, player, options = {}) {
         this.name = 'CircuitSystem';
         this.eventBus = eventBus;
         this.input = inputManager;
         this.player = player;
+        this.assetLoader = options.assetLoader || null;
 
         this.nodes = new Map(); // id -> Node
         this.conduits = [];     // Array of background conduits
         this.pulseTime = 0;
 
-        // Visual dial styling parameters
-        this.DIAL_RADIUS = 34;
-        this.CHANNEL_HALF_WIDTH = 9;
+        // Visual dial styling parameters (strictly 32px grid tiles)
+        this.DIAL_RADIUS = 16;
+        this.CHANNEL_HALF_WIDTH = 6;
 
         this._bindEvents();
     }
@@ -153,12 +154,30 @@ export class CircuitSystem {
             }
         }
 
-        // 2. Check for [E] rotation input while tethered to a circuit socket
+        // 2. Check for [E] rotation input while tethered to a circuit socket or standing adjacent
         const p = this.player;
-        if (this.input.interactPressed && p.isTethered && p.tetherSocket) {
-            const sock = p.tetherSocket;
-            if (sock.type === 'CIRCUIT' && sock.circuitNodeId) {
-                this.rotateNode(sock.circuitNodeId);
+        if (this.input.interactPressed && p) {
+            if (p.isTethered && p.tetherSocket) {
+                const sock = p.tetherSocket;
+                if (sock.type === 'CIRCUIT' && sock.circuitNodeId) {
+                    this.rotateNode(sock.circuitNodeId);
+                }
+            } else {
+                // If player is standing close to a circuit dial, allow rotating directly
+                const px = p.x + p.width / 2;
+                const py = p.y + p.height / 2;
+                let closest = null;
+                let minDist = 42;
+                for (const node of this.nodes.values()) {
+                    const dist = Math.hypot(node.x - px, node.y - py);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = node;
+                    }
+                }
+                if (closest) {
+                    this.rotateNode(closest.id);
+                }
             }
         }
     }
@@ -359,220 +378,81 @@ export class CircuitSystem {
 
     _renderDialNode(ctx, node) {
         ctx.save();
-        ctx.translate(node.x, node.y);
+        ctx.translate(Math.round(node.x), Math.round(node.y));
 
-        const radius = this.DIAL_RADIUS;
-        const halfWidth = this.CHANNEL_HALF_WIDTH;
+        const sheet = this.assetLoader ? this.assetLoader.getImage('circuits_sheet') : null;
 
-        // 1. Base Circular Dial Plate
-        ctx.fillStyle = '#0a1017';
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
+        if (sheet) {
+            // Determine design column in Circuits(4).png:
+            // Col 0 = CROSS, Col 1 = T_SHAPE, Col 2 = CORNER, Col 3 = STRAIGHT
+            // Row 1 (y = 32) when unpowered, Row 0 (y = 0) when powered
+            let col = 1;
+            let sy = node.isPowered ? 0 : 32;
 
-        // 2. Double Concentric Outer Ring in Metallic Blue
-        ctx.strokeStyle = '#204a6e';
-        ctx.lineWidth = 3.5;
-        ctx.stroke();
-
-        ctx.strokeStyle = '#4da6ff';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius - 2.5, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // 3. Clip internal conduit channels to the circular dial
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(0, 0, radius - 3.5, 0, Math.PI * 2);
-        ctx.clip();
-
-        // Rotate for smooth visual dial rotation
-        ctx.rotate(node.rotationAngle);
-
-        // Compute active ports relative to the dial's base rotation
-        // Because the canvas is rotated by node.rotationAngle, we draw the channels in their current ports orientation
-        // To avoid double-rotating, we draw the canonical channels matching node.ports when unrotated,
-        // or apply smooth visual delta. Here node.targetRotationAngle advances by PI/2, and node.ports shifts.
-        // We can draw based on the current logical node.ports, and apply the smooth fractional delta:
-        const angleDelta = node.rotationAngle - node.targetRotationAngle;
-        ctx.rotate(angleDelta);
-
-        // Draw Conduit Channels for active ports
-        this._renderDialChannels(ctx, node.ports, node.isPowered, radius, halfWidth);
-
-        ctx.restore(); // Exit clip & rotation
-
-        // 4. Center Wire Plug Socket
-        this._renderCenterSocket(ctx, node);
-
-        // 5. Dial Rotation Sparks
-        if (node.sparks && node.sparks.length > 0) {
-            for (const sp of node.sparks) {
-                ctx.fillStyle = sp.color;
-                ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
+            if (node.design === 'CROSS') col = 0;
+            else if (node.design === 'T_SHAPE') col = 1;
+            else if (node.design === 'CORNER') col = 2;
+            else if (node.design === 'STRAIGHT') col = 3;
+            else if (node.type === 'SOURCE' || node.design === 'Source') {
+                col = 0;
+                sy = 160;
+            } else {
+                // Determine from active ports
+                const count = node.ports.filter(Boolean).length;
+                if (count === 4) col = 0;
+                else if (count === 3) col = 1;
+                else if (count === 2) {
+                    col = (node.ports[0] === node.ports[2]) ? 3 : 2;
+                } else col = 1;
             }
-        }
 
-        ctx.restore();
-    }
+            const sx = col * 32;
 
-    _renderDialChannels(ctx, ports, isPowered, radius, h) {
-        const R = radius + 2;
+            ctx.save();
+            ctx.imageSmoothingEnabled = false; // Authentic pixel art crispness
+            // Smoothly rotate the 32x32 sprite around its center
+            ctx.rotate(node.rotationAngle);
+            ctx.drawImage(sheet, sx, sy, 32, 32, -16, -16, 32, 32);
+            ctx.restore();
 
-        // 1. Fill Channel Interiors
-        // Draw branches for all active ports meeting at the center hub
-        ctx.fillStyle = isPowered ? 'rgba(255, 140, 0, 0.25)' : '#0d131a';
+            // Center plug socket contact
+            this._renderCenterSocket(ctx, node);
 
-        ctx.beginPath();
-        // Center hub
-        ctx.rect(-h, -h, h * 2, h * 2);
-
-        // Port 0: Top
-        if (ports[PORT.TOP]) {
-            ctx.rect(-h, -R, h * 2, R);
-        }
-        // Port 1: Right
-        if (ports[PORT.RIGHT]) {
-            ctx.rect(0, -h, R, h * 2);
-        }
-        // Port 2: Bottom
-        if (ports[PORT.BOTTOM]) {
-            ctx.rect(-h, 0, h * 2, R);
-        }
-        // Port 3: Left
-        if (ports[PORT.LEFT]) {
-            ctx.rect(-R, -h, R, h * 2);
-        }
-        ctx.fill();
-
-        // 2. Channel Borders in Metallic Blue
-        ctx.strokeStyle = '#3ca0ff';
-        ctx.lineWidth = 2.2;
-        ctx.lineCap = 'square';
-
-        // Check each of the 4 quadrants between adjacent ports
-        // Quadrant 0: Top (0) to Right (1)
-        this._drawQuadrantBorder(ctx, ports[PORT.TOP], ports[PORT.RIGHT], 0, -1, 1, 0, R, h);
-        // Quadrant 1: Right (1) to Bottom (2)
-        this._drawQuadrantBorder(ctx, ports[PORT.RIGHT], ports[PORT.BOTTOM], 1, 0, 0, 1, R, h);
-        // Quadrant 2: Bottom (2) to Left (3)
-        this._drawQuadrantBorder(ctx, ports[PORT.BOTTOM], ports[PORT.LEFT], 0, 1, -1, 0, R, h);
-        // Quadrant 3: Left (3) to Top (0)
-        this._drawQuadrantBorder(ctx, ports[PORT.LEFT], ports[PORT.TOP], -1, 0, 0, -1, R, h);
-
-        // 3. Glowing Animated Amber/Orange Electrical Current inside Powered Channels
-        if (isPowered) {
-            this._renderElectricalCurrent(ctx, ports, R);
-        }
-    }
-
-    _drawQuadrantBorder(ctx, portA, portB, ux, uy, vx, vy, R, h) {
-        // u = direction of port A, v = direction of port B
-        if (portA && portB) {
-            // Both active: Inner 90-degree corner
-            ctx.beginPath();
-            ctx.moveTo(ux * R + vx * h, uy * R + vy * h);
-            ctx.lineTo(ux * h + vx * h, uy * h + vy * h);
-            ctx.lineTo(ux * h + vx * R, uy * h + vy * R);
-            ctx.stroke();
-        } else if (portA && !portB) {
-            // Port A active, Port B inactive: border line extends along A
-            ctx.beginPath();
-            ctx.moveTo(ux * R + vx * h, uy * R + vy * h);
-            ctx.lineTo(-ux * h + vx * h, -uy * h + vy * h);
-            ctx.stroke();
-        } else if (!portA && portB) {
-            // Port A inactive, Port B active: border line extends along B
-            ctx.beginPath();
-            ctx.moveTo(ux * h + vx * R, uy * h + vy * R);
-            ctx.lineTo(ux * h - vx * h, uy * h - vy * h);
-            ctx.stroke();
-        }
-    }
-
-    _renderElectricalCurrent(ctx, ports, R) {
-        ctx.save();
-
-        const dirs = [
-            { x: 0, y: -1 }, // Top
-            { x: 1, y: 0 },  // Right
-            { x: 0, y: 1 },  // Bottom
-            { x: -1, y: 0 }  // Left
-        ];
-
-        // Draw animated wavy plasma path for each active port branch
-        for (let i = 0; i < 4; i++) {
-            if (!ports[i]) continue;
-
-            const dir = dirs[i];
-            const perpX = -dir.y;
-            const perpY = dir.x;
-
-            const steps = 14;
-            const stepLen = R / steps;
-
-            // Outer amber glow wave
-            ctx.strokeStyle = '#ff9900';
-            ctx.lineWidth = 2.8;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-
-            for (let s = 1; s <= steps; s++) {
-                const dist = s * stepLen;
-                const wave = Math.sin(dist * 0.45 - this.pulseTime * 10) * 3.2
-                           + Math.cos(dist * 0.85 + this.pulseTime * 14) * 1.4;
-                const px = dir.x * dist + perpX * wave;
-                const py = dir.y * dist + perpY * wave;
-                ctx.lineTo(px, py);
+            // Dial rotation sparks
+            if (node.sparks && node.sparks.length > 0) {
+                for (const sp of node.sparks) {
+                    ctx.fillStyle = sp.color;
+                    ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
+                }
             }
-            ctx.stroke();
-
-            // Inner hot yellow core
-            ctx.strokeStyle = '#fff099';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-
-            for (let s = 1; s <= steps; s++) {
-                const dist = s * stepLen;
-                const wave = Math.sin(dist * 0.45 - this.pulseTime * 10) * 3.2
-                           + Math.cos(dist * 0.85 + this.pulseTime * 14) * 1.4;
-                const px = dir.x * dist + perpX * wave;
-                const py = dir.y * dist + perpY * wave;
-                ctx.lineTo(px, py);
-            }
-            ctx.stroke();
+        } else {
+            // Minimalist fallback
+            ctx.fillStyle = node.isPowered ? '#ffaa00' : '#204a6e';
+            ctx.fillRect(-16, -16, 32, 32);
         }
 
         ctx.restore();
     }
 
     _renderCenterSocket(ctx, node) {
-        // Metallic blue center socket housing
-        ctx.fillStyle = '#111923';
-        ctx.beginPath();
-        ctx.arc(0, 0, 9, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.strokeStyle = '#3ca0ff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Inner plug port core
-        const isPlugged = (this.player.isTethered &&
+        const isPlugged = (this.player &&
+                           this.player.isTethered &&
                            this.player.tetherSocket &&
                            this.player.tetherSocket.circuitNodeId === node.id);
 
-        ctx.fillStyle = isPlugged ? '#ffaa00' : '#080d14';
-        ctx.beginPath();
-        ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Center contact pin
-        ctx.fillStyle = isPlugged ? '#ffffff' : '#4da6ff';
-        ctx.beginPath();
-        ctx.arc(0, 0, 2, 0, Math.PI * 2);
-        ctx.fill();
+        if (isPlugged) {
+            ctx.fillStyle = '#fffa65';
+            ctx.beginPath();
+            ctx.arc(0, 0, 4, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillStyle = '#111923';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#3ca0ff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
     }
 }

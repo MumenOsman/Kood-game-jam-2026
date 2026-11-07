@@ -13,14 +13,17 @@ export class AnimationController {
 
         // Custom FPS configuration per state
         this.animFps = {
-            idle: 6,
+            idle: 8,
             walk: 10,
             run: 14,
-            jump: 10,
+            jump: 12,
+            swing: 12,
+            hurt: 10,
+            shoot: 16,
             rest: 5,
             throw_ground: 12,
             throw_windup: 12,
-            throw_air: 10
+            throw_air: 12
         };
 
         this.chargePulse = 0;
@@ -30,8 +33,12 @@ export class AnimationController {
         // Choose animation based on player physics & state
         let targetAnim = 'idle';
 
-        if (player.isAiming) {
-            targetAnim = player.isGrounded ? 'throw_ground' : 'throw_air';
+        if (player.shockInvulnTimer > 0) {
+            targetAnim = 'hurt';
+        } else if (player.shootTimer > 0) {
+            targetAnim = 'shoot';
+        } else if (player.isTethered && !player.isGrounded) {
+            targetAnim = 'swing';
         } else if (!player.isGrounded) {
             targetAnim = 'jump';
         } else if (player.isResting || player.isCharging) {
@@ -101,7 +108,7 @@ export class AnimationController {
             const wallX = player.wallSlideDirection === -1 ? player.x : player.x + player.width;
             ctx.fillStyle = '#ffaa00';
             for (let i = 0; i < 2; i++) {
-                const sy = player.y + 30 + Math.random() * 30;
+                const sy = player.y + 10 + Math.random() * 16;
                 ctx.fillRect(wallX - 1.5, sy, 3, 3);
             }
         }
@@ -109,8 +116,8 @@ export class AnimationController {
         // Render charging energy aura if recharging
         if (player.isCharging) {
             const head = player.getHeadSocket();
-            const glowRadius = 38 + Math.sin(this.chargePulse) * 8;
-            const gradient = ctx.createRadialGradient(head.x, head.y, 4, head.x, head.y, glowRadius);
+            const glowRadius = 20 + Math.sin(this.chargePulse) * 4;
+            const gradient = ctx.createRadialGradient(head.x, head.y, 2, head.x, head.y, glowRadius);
             gradient.addColorStop(0, 'rgba(255, 240, 100, 0.7)');
             gradient.addColorStop(0.5, 'rgba(0, 240, 255, 0.3)');
             gradient.addColorStop(1, 'rgba(0, 240, 255, 0)');
@@ -123,11 +130,11 @@ export class AnimationController {
             // Energy sparks
             for (let i = 0; i < 3; i++) {
                 const angle = this.chargePulse + i * 2.1;
-                const dist = 14 + Math.cos(this.chargePulse * 1.5 + i) * 10;
+                const dist = 8 + Math.cos(this.chargePulse * 1.5 + i) * 6;
                 const sx = head.x + Math.cos(angle) * dist;
                 const sy = head.y + Math.sin(angle) * dist;
                 ctx.fillStyle = '#fffa65';
-                ctx.fillRect(sx - 2, sy - 2, 4, 4);
+                ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
             }
         }
 
@@ -136,29 +143,28 @@ export class AnimationController {
             const animFrames = spriteMeta[this.currentAnim];
             const frame = animFrames[Math.min(this.frameIndex, animFrames.length - 1)];
 
-            const targetHeight = player.height * 1.15;
-            const aspect = frame.w / frame.h;
-            const targetWidth = targetHeight * aspect;
-
-            const drawX = player.x + (player.width - targetWidth) / 2;
-            const drawY = player.y + player.height - targetHeight;
-
             ctx.save();
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
             if (player.facing === -1) {
-                // Flip horizontally across player center
+                // Flip horizontally across player center (16px)
                 ctx.translate(player.x + player.width / 2, 0);
                 ctx.scale(-1, 1);
                 ctx.translate(-(player.x + player.width / 2), 0);
             }
 
+            // Cell size 192px has a 128px core (32 world px) and 32px padding (8 world px)
+            // Destination rect is [player.x - 8, player.y - 8, 48, 48]
+            // Core character body sits strictly within [player.x, player.y, 32, 32]
             ctx.drawImage(
                 spriteImg,
                 frame.x, frame.y, frame.w, frame.h,
-                drawX, drawY, targetWidth, targetHeight
+                player.x - 8, player.y - 8, 48, 48
             );
             ctx.restore();
         } else {
-            // High-quality procedural robot fallback
+            // High-quality procedural robot fallback (strictly 32x32)
             this._renderProceduralRobot(ctx, player);
         }
 
@@ -167,7 +173,6 @@ export class AnimationController {
 
     _renderProceduralRobot(ctx, player) {
         const cx = player.x + player.width / 2;
-        const cy = player.y + player.height / 2;
 
         ctx.save();
         if (player.facing === -1) {
@@ -176,40 +181,20 @@ export class AnimationController {
             ctx.translate(-cx, 0);
         }
 
-        // Pumpkin Head
-        ctx.fillStyle = '#ff8811';
-        ctx.beginPath();
-        ctx.ellipse(cx, player.y + 24, 18, 16, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#b85d00';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Head antenna plug connector
+        // Robot Head (14x12)
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(player.x + 9, player.y + 4, 14, 11);
         ctx.fillStyle = '#222';
-        ctx.fillRect(cx - 3, player.y + 4, 6, 8);
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillRect(cx - 2, player.y + 2, 4, 3);
+        ctx.fillRect(player.x + 17, player.y + 8, 4, 3);
 
-        // Eyes & smile
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.arc(cx + 6, player.y + 22, 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Robot Body (18x10)
+        ctx.fillStyle = '#3a4454';
+        ctx.fillRect(player.x + 7, player.y + 15, 18, 10);
 
-        // Robotic Body
-        ctx.fillStyle = '#443b35';
-        ctx.fillRect(player.x + 12, player.y + 40, player.width - 24, 20);
-
-        // Robotic Legs
-        ctx.fillStyle = '#2b231e';
-        if (player.isResting) {
-            // Sitting legs
-            ctx.fillRect(player.x + 8, player.y + 60, 28, 10);
-        } else {
-            ctx.fillRect(player.x + 12, player.y + 60, 6, 12);
-            ctx.fillRect(player.x + player.width - 18, player.y + 60, 6, 12);
-        }
+        // Robot Legs (4x7 each)
+        ctx.fillStyle = '#1c222b';
+        ctx.fillRect(player.x + 8, player.y + 25, 5, 7);
+        ctx.fillRect(player.x + 19, player.y + 25, 5, 7);
 
         ctx.restore();
     }
