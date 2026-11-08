@@ -102,10 +102,6 @@ export class AnimationController {
                 }
             }
         }
-
-        if (player.isCharging) {
-            this.chargePulse += dt * 8;
-        }
     }
 
     render(ctx, player) {
@@ -130,20 +126,6 @@ export class AnimationController {
             for (let i = 0; i < 2; i++) {
                 const sy = player.y + 10 + Math.random() * 16;
                 ctx.fillRect(wallX - 1.5, sy, 3, 3);
-            }
-        }
-
-        // Subtle micro-sparks if recharging
-        if (player.isCharging) {
-            const head = player.getHeadSocket();
-            // Tactile energy micro-sparks
-            for (let i = 0; i < 3; i++) {
-                const angle = this.chargePulse + i * 2.1;
-                const dist = 6 + Math.cos(this.chargePulse * 1.5 + i) * 4;
-                const sx = head.x + Math.cos(angle) * dist;
-                const sy = head.y + Math.sin(angle) * dist;
-                ctx.fillStyle = '#fffa65';
-                ctx.fillRect(sx - 1, sy - 1, 2, 2);
             }
         }
 
