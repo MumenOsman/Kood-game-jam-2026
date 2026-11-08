@@ -71,17 +71,35 @@ export class MainMenu {
     _getButtonBounds(hasSave) {
         const cx = 1280 / 2;
         const frameY = 225;
-        const startY = frameY + 28;
+        const frameH = 270;
         const btnW = 280;
         const btnH = 38;
         const spacing = 14;
 
-        return [
-            { id: 'start', text: 'START GAME', x: cx - btnW / 2, y: startY, width: btnW, height: btnH, disabled: false, variant: 'amber' },
-            { id: 'continue', text: 'CONTINUE', x: cx - btnW / 2, y: startY + (btnH + spacing), width: btnW, height: btnH, disabled: !hasSave, variant: 'slate' },
-            { id: 'options', text: 'OPTIONS', x: cx - btnW / 2, y: startY + (btnH + spacing) * 2, width: btnW, height: btnH, disabled: false, variant: 'slate' },
-            { id: 'credits', text: 'CREDITS', x: cx - btnW / 2, y: startY + (btnH + spacing) * 3, width: btnW, height: btnH, disabled: false, variant: 'slate' }
+        const buttonDefs = hasSave ? [
+            { id: 'continue', text: 'CONTINUE', variant: 'amber' },
+            { id: 'start', text: 'START NEW GAME', variant: 'slate' },
+            { id: 'options', text: 'OPTIONS', variant: 'slate' },
+            { id: 'credits', text: 'CREDITS', variant: 'slate' }
+        ] : [
+            { id: 'start', text: 'START NEW GAME', variant: 'amber' },
+            { id: 'options', text: 'OPTIONS', variant: 'slate' },
+            { id: 'credits', text: 'CREDITS', variant: 'slate' }
         ];
+
+        const totalH = buttonDefs.length * btnH + (buttonDefs.length - 1) * spacing;
+        const startY = frameY + (frameH - totalH) / 2;
+
+        return buttonDefs.map((def, idx) => ({
+            id: def.id,
+            text: def.text,
+            x: cx - btnW / 2,
+            y: startY + idx * (btnH + spacing),
+            width: btnW,
+            height: btnH,
+            disabled: false,
+            variant: def.variant
+        }));
     }
 
     render(ctx) {

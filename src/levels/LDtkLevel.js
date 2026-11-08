@@ -764,7 +764,7 @@ export class LDtkLevel extends Level {
         }
         const rm = this.rooms[Math.max(0, Math.min(this.rooms.length - 1, roomIndex))];
         if (rm.id === 'And_gate_3_above') {
-            return { x: 3328, y: -192 };
+            return { x: rm.worldX + 128, y: rm.worldY + 128 };
         }
         if (rm.id === 'Level_7') {
             return { x: rm.worldX + 64, y: rm.worldY + 128 };

@@ -172,9 +172,10 @@ async function bootstrap() {
 
     // 7. Save & UI Manager Integration
     let lastSavedRoomIndex = level.activeRoomIndex || 0;
+    let isGameCompleted = false;
 
     function saveCurrentProgress() {
-        if (!level) return;
+        if (!level || isGameCompleted) return;
         const activeRoomIdx = level.activeRoomIndex || 0;
         const roomName = (level.rooms && level.rooms[activeRoomIdx]?.identifier) || `Sector ${activeRoomIdx + 1}`;
         const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(activeRoomIdx) : { x: player.x, y: player.y };
@@ -194,6 +195,7 @@ async function bootstrap() {
         saveManager,
         inputManager: input,
         onStartNewGame: () => {
+            isGameCompleted = false;
             wireSystem.disconnectWire();
             const startRoom = 0;
             level.activeRoomIndex = startRoom;
@@ -243,7 +245,9 @@ async function bootstrap() {
             eventBus.emit('ROOM_CHANGED', { roomIndex: 0, roomId: (level.rooms && level.rooms[0] && level.rooms[0].id) || 'Room_0' });
         },
         onExitToMenu: () => {
-            saveCurrentProgress();
+            if (!isGameCompleted) {
+                saveCurrentProgress();
+            }
             wireSystem.disconnectWire();
         }
     });
@@ -315,7 +319,20 @@ async function bootstrap() {
                     const lastRoom = rooms[lastRoomIdx];
                     const exitThresholdX = lastRoom.worldX + lastRoom.pxWid - 48;
                     if (player.x >= exitThresholdX && player.y >= lastRoom.worldY && player.y <= lastRoom.worldY + lastRoom.pxHei + 20) {
-                        uiManager.showCredits();
+                        if (!isGameCompleted) {
+                            isGameCompleted = true;
+                            saveManager.clearSave();
+                            wireSystem.disconnectWire();
+                            level.activeRoomIndex = 0;
+                            const startCp = level.getRoomCheckpoint ? level.getRoomCheckpoint(0) : level.spawnPoint;
+                            player.x = startCp.x;
+                            player.y = startCp.y;
+                            player.vx = 0;
+                            player.vy = 0;
+                            player.battery = player.maxBattery || 100;
+                            camera.snapTo(player.x, player.y);
+                            uiManager.showCredits();
+                        }
                     }
                 }
 

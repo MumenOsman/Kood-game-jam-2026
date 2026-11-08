@@ -8,7 +8,7 @@
  * - OPTIONS
  */
 import { UITheme } from './UITheme.js?v=20261108_v11';
-import { MainMenu } from './MainMenu.js?v=20261108_v13';
+import { MainMenu } from './MainMenu.js?v=20261108_v16';
 import { PauseMenu } from './PauseMenu.js?v=20261108_v11';
 import { OptionsMenu } from './OptionsMenu.js?v=20261108_v11';
 import { VictoryModal } from './VictoryModal.js?v=20261108_v11';
