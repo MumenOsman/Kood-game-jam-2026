@@ -22,6 +22,7 @@ import { HUD } from './ui/HUD.js?v=20261108_v15';
 import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
 import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
 import { UIManager } from './ui/UIManager.js?v=20261108_v13';
+import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v1';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
@@ -58,7 +59,18 @@ async function bootstrap() {
         assetLoader.loadImage('ui_frame_map', './assets/ui/frames/FrameMap.png?v=20261107_v1'),
         assetLoader.loadImage('ui_btn_10', './assets/ui/buttons/ButtonMap10.png?v=20261107_v1'),
         assetLoader.loadImage('ui_btn_5', './assets/ui/buttons/ButtonMap5.png?v=20261107_v1'),
-        assetLoader.loadImage('ui_slider', './assets/ui/bars/Scrolling1.png?v=20261107_v1')
+        assetLoader.loadImage('ui_slider', './assets/ui/bars/Scrolling1.png?v=20261107_v1'),
+        assetLoader.loadImage('factory_bg', './assets/backgrounds/factory_bg.png?v=20261108_v1'),
+        assetLoader.loadImage('vehicle_static', './assets/sprites/vehicle/vehicle-3-static.png?v=20261108_v1'),
+        assetLoader.loadImage('vehicle_f1', './assets/sprites/vehicle/frames/vehicle-3.png?v=20261108_v1'),
+        assetLoader.loadImage('vehicle_f2', './assets/sprites/vehicle/frames/vehicle-4.png?v=20261108_v1'),
+        assetLoader.loadImage('vehicle_f3', './assets/sprites/vehicle/frames/vehicle-5.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_back1', './assets/sprites/vehicle/frames-thrust/thrust-back/thrust-back1.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_back2', './assets/sprites/vehicle/frames-thrust/thrust-back/thrust-back2.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_back3', './assets/sprites/vehicle/frames-thrust/thrust-back/thrust-back3.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_bottom1', './assets/sprites/vehicle/frames-thrust/thrust-bottom/thrust-bottom1.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_bottom2', './assets/sprites/vehicle/frames-thrust/thrust-bottom/thrust-bottom2.png?v=20261108_v1'),
+        assetLoader.loadImage('thrust_bottom3', './assets/sprites/vehicle/frames-thrust/thrust-bottom/thrust-bottom3.png?v=20261108_v1')
     ]);
 
     // 3. Entity & Level Setup
@@ -197,6 +209,10 @@ async function bootstrap() {
         onStartNewGame: () => {
             isGameCompleted = false;
             wireSystem.disconnectWire();
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
             const startRoom = 0;
             level.activeRoomIndex = startRoom;
             if (typeof level.resetAllCircuits === 'function') {
@@ -216,6 +232,10 @@ async function bootstrap() {
         },
         onLoadGame: (saveData) => {
             wireSystem.disconnectWire();
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
             const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, saveData.roomIndex || 0));
             level.activeRoomIndex = targetIdx;
             const cp = saveData.checkpoint || (level.getRoomCheckpoint ? level.getRoomCheckpoint(targetIdx) : level.spawnPoint);
@@ -229,6 +249,10 @@ async function bootstrap() {
         onSelectLevel: (roomIndex) => {
             isGameCompleted = false;
             wireSystem.disconnectWire();
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
             const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, roomIndex || 0));
             level.activeRoomIndex = targetIdx;
             if (typeof level.resetRoomCircuits === 'function') {
@@ -254,10 +278,18 @@ async function bootstrap() {
             eventBus.emit('ROOM_CHANGED', { roomIndex: targetIdx, roomId: (level.rooms && level.rooms[targetIdx] && level.rooms[targetIdx].id) || `Room_${targetIdx}` });
         },
         onRestartLevel: () => {
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
             respawnPlayer('RESTART');
         },
         onRestartGame: () => {
             wireSystem.disconnectWire();
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
             const startRoom = 0;
             level.activeRoomIndex = startRoom;
             if (typeof level.resetAllCircuits === 'function') {
@@ -288,6 +320,34 @@ async function bootstrap() {
                 saveCurrentProgress();
             }
             wireSystem.disconnectWire();
+            if (creditFlightScene) {
+                creditFlightScene.state = FLIGHT_STATE.INACTIVE;
+                player.isVisible = true;
+            }
+        }
+    });
+
+    // 7b. Credits Flight Scene (Secret Level Vehicle Flight & Credits Minigame)
+    const creditFlightScene = new CreditFlightScene({
+        assetLoader,
+        audioManager,
+        uiTheme: uiManager.uiTheme,
+        eventBus,
+        onComplete: () => {
+            isGameCompleted = true;
+            saveManager.markLevelCompleted(11); // Mark Sector 12 complete
+            saveManager.clearSave();
+            wireSystem.disconnectWire();
+            level.activeRoomIndex = 0;
+            const startCp = level.getRoomCheckpoint ? level.getRoomCheckpoint(0) : level.spawnPoint;
+            player.x = startCp.x;
+            player.y = startCp.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.battery = player.maxBattery || 100;
+            player.isVisible = true;
+            camera.snapTo(player.x, player.y);
+            uiManager.showCredits();
         }
     });
 
@@ -318,6 +378,20 @@ async function bootstrap() {
             pipeSystem.update(dt);
             animation.update(dt, player);
 
+            const isFlightMode = creditFlightScene && creditFlightScene.state !== FLIGHT_STATE.INACTIVE;
+            if (isFlightMode) {
+                player.isVisible = false;
+                wireSystem.disconnectWire();
+            }
+
+            // High-speed sky flight runner mode
+            if (creditFlightScene && (creditFlightScene.state === FLIGHT_STATE.FLIGHT_RUNNER || creditFlightScene.state === FLIGHT_STATE.HYPERDRIVE_EXIT)) {
+                creditFlightScene.update(dt, input, camera, level);
+                if (devTools) devTools.update(dt);
+                input.postUpdate();
+                return;
+            }
+
             if (uiManager.state === 'PLAYING') {
                 // Full gameplay physics kinematics, collisions, hazards, wire & entity updates
                 level.update(dt, player, input);
@@ -339,54 +413,31 @@ async function bootstrap() {
                 // Electrified hazards & shock detection
                 hazardSystem.update(dt);
 
-                // Player kinematics & collisions
-                movement.update(dt);
+                // Hangar takeoff spaceship control vs regular player locomotion
+                if (creditFlightScene && creditFlightScene.state === FLIGHT_STATE.HANGAR_TAKEOFF) {
+                    creditFlightScene.update(dt, input, camera, level);
+                } else {
+                    movement.update(dt);
+                    wireSystem.update(dt);
 
-                // Wire aiming, projectile & pendulum constraint
-                wireSystem.update(dt);
-
-                // Fall-out-of-bounds safety respawn
-                const activeRoom = (level.rooms && level.rooms[level.activeRoomIndex]) || { worldX: 0, worldY: 0, pxWid: 640, pxHei: 320 };
-                if (player.y > activeRoom.worldY + activeRoom.pxHei + 40) {
-                    respawnPlayer('FALL');
-                }
-
-                // Zero power reboot respawn
-                if (player.battery <= 0 && player.shockInvulnTimer <= 0) {
-                    respawnPlayer('BATTERY_DEPLETED');
-                }
-
-                // Final Sector / Game Completion Trigger (dynamic for last room)
-                const rooms = level.rooms || [];
-                const lastRoomIdx = rooms.length > 0 ? rooms.length - 1 : 0;
-                if (rooms.length > 0 && level.activeRoomIndex === lastRoomIdx) {
-                    const lastRoom = rooms[lastRoomIdx];
-                    const exitThresholdX = lastRoom.worldX + lastRoom.pxWid - 48;
-                    if (player.x >= exitThresholdX && player.y >= lastRoom.worldY && player.y <= lastRoom.worldY + lastRoom.pxHei + 20) {
-                        if (!isGameCompleted) {
-                            isGameCompleted = true;
-                            saveManager.markLevelCompleted(lastRoomIdx);
-                            saveManager.clearSave();
-                            wireSystem.disconnectWire();
-                            level.activeRoomIndex = 0;
-                            const startCp = level.getRoomCheckpoint ? level.getRoomCheckpoint(0) : level.spawnPoint;
-                            player.x = startCp.x;
-                            player.y = startCp.y;
-                            player.vx = 0;
-                            player.vy = 0;
-                            player.battery = player.maxBattery || 100;
-                            camera.snapTo(player.x, player.y);
-                            uiManager.showCredits();
-                        }
+                    // Fall-out-of-bounds safety respawn
+                    const activeRoom = (level.rooms && level.rooms[level.activeRoomIndex]) || { worldX: 0, worldY: 0, pxWid: 640, pxHei: 320 };
+                    if (player.y > activeRoom.worldY + activeRoom.pxHei + 40) {
+                        respawnPlayer('FALL');
                     }
+
+                    // Zero power reboot respawn
+                    if (player.battery <= 0 && player.shockInvulnTimer <= 0) {
+                        respawnPlayer('BATTERY_DEPLETED');
+                    }
+
+                    // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
+                    camera.follow(player);
+                    camera.update();
+
+                    // HUD
+                    hud.update(dt);
                 }
-
-                // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
-                camera.follow(player);
-                camera.update();
-
-                // HUD
-                hud.update(dt);
             } else {
                 // In menus / pause: keep ambient entity visuals animated (drones hovering & thrusters, blast doors)
                 // while kinematics, physics, timers, wire, and hazard shocks remain 100% frozen
@@ -417,6 +468,13 @@ async function bootstrap() {
             input.postUpdate();
         },
         render(ctx, alpha) {
+            // If in Flight Runner mode, render full-screen credits flight scene
+            if (creditFlightScene && (creditFlightScene.state === FLIGHT_STATE.FLIGHT_RUNNER || creditFlightScene.state === FLIGHT_STATE.HYPERDRIVE_EXIT)) {
+                creditFlightScene.render(ctx);
+                if (devTools) devTools.renderScreen(ctx);
+                return;
+            }
+
             const isTitleFlow = uiManager.state === 'MAIN_MENU' ||
                 uiManager.state === 'CREDITS' ||
                 uiManager.state === 'VICTORY' ||
@@ -443,7 +501,12 @@ async function bootstrap() {
             level.renderForeground(ctx, camera);
             hazardSystem.render(ctx, camera);
             wireSystem.render(ctx);
-            animation.render(ctx, player); // Player robot is always present in the scene
+
+            if (creditFlightScene && creditFlightScene.state === FLIGHT_STATE.HANGAR_TAKEOFF) {
+                creditFlightScene.render(ctx, camera);
+            } else if (player.isVisible !== false) {
+                animation.render(ctx, player);
+            }
 
             // DevTools world-space gizmos
             if (devTools) {
@@ -461,8 +524,8 @@ async function bootstrap() {
                 // Render Title screen or Options overlay (HUD is never shown in menus)
                 uiManager.render(ctx);
             } else {
-                // In-Game Flow: only render HUD when actively playing
-                if (uiManager.state === 'PLAYING') {
+                // In-Game Flow: only render HUD when actively playing (and not in flight takeoff)
+                if (uiManager.state === 'PLAYING' && (!creditFlightScene || creditFlightScene.state === FLIGHT_STATE.INACTIVE)) {
                     hud.render(ctx);
                 }
 

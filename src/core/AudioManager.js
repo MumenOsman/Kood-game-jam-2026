@@ -16,7 +16,8 @@ export class AudioManager {
         // Tracks definition
         this.musicSources = {
             main_menu: './assets/audio/music/main_menu.mp3',
-            game_levels: './assets/audio/music/game_levels.mp3'
+            game_levels: './assets/audio/music/game_levels.mp3',
+            special_level: './assets/audio/music/warped_vehicles.mp3'
         };
 
         this.fxSources = {

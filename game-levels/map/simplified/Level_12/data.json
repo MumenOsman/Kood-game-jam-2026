@@ -18,5 +18,35 @@
 		"Test_layer.png",
 		"Pipes.png"
 	],
-	"entities" : {}
+	"entities": {
+		"Spaceship": [
+			{
+				"id": "Spaceship",
+				"iid": "b7cb2140-bde0-11f1-a2c7-0fa09cd7ca9d",
+				"layer": "Spaceship",
+				"x": 368,
+				"y": 112,
+				"width": 32,
+				"height": 32,
+				"color": 9149364,
+				"customFields" : {}
+			}
+		],
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "fca4fc70-bde0-11f1-a2c7-fb0bc89b6933",
+				"layer": "Socket_dials",
+				"x": 176,
+				"y": 80,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone",
+					"Context": "WASD to control the spaceship"
+				}
+			}
+		]
+	}
 }

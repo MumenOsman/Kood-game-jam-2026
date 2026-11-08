@@ -7,6 +7,7 @@
 import { Level } from './Level.js?v=20261107_v8';
 import { Socket } from '../entities/Socket.js?v=20261107_v8';
 import { Drone } from '../entities/Drone.js?v=20261108_v4';
+import { Spaceship } from '../entities/Spaceship.js?v=20261108_v1';
 import { PORT, NODE_DESIGNS } from '../modules/CircuitSystem.js?v=20261107_v8';
 
 export class LDtkLevel extends Level {
@@ -44,6 +45,7 @@ export class LDtkLevel extends Level {
         // Exit Blast Doors & Power Sources (purely loaded from map)
         this.doors = [];
         this.powerSources = [];
+        this.spaceship = null;
 
         this.isLoaded = false;
         this._bindEvents();
@@ -94,7 +96,7 @@ export class LDtkLevel extends Level {
             // 2. Load background image & room tile layers for all rooms
             this.backgroundImage = await this._loadRoomImage(this.bgPath);
 
-            const rawLevels = (data.levels || []).filter(lvl => lvl.identifier !== 'Level_12');
+            const rawLevels = data.levels || [];
             // Sort rooms in logical spatial progression order (worldX ascending, then bottom-to-top worldY descending)
             const levels = [...rawLevels].sort((a, b) => {
                 const ax = a.worldX !== undefined ? a.worldX : 0;
@@ -473,6 +475,16 @@ export class LDtkLevel extends Level {
                         color: fields.Color || '#FF0000',
                         isPowered: false
                     });
+                } else if (id === 'Spaceship') {
+                    this.spaceship = new Spaceship({
+                        x: topLeftX,
+                        y: topLeftY,
+                        width: 148,
+                        height: 72,
+                        roomIndex: roomIndex,
+                        assetLoader: this.assetLoader,
+                        eventBus: this.eventBus
+                    });
                 }
             }
         }
@@ -565,6 +577,9 @@ export class LDtkLevel extends Level {
             }
             if (ctxKey.includes('wall run')) {
                 return 'Sprint into wall to run up\n[SPACE] = Wall Jump';
+            }
+            if (ctxKey.includes('spaceship') || ctxKey.includes('vehicle')) {
+                return 'Board the spaceship\nWASD = Maneuver & Fly';
             }
             if (ctxKey.includes('swing') || ctxKey.includes('connect wire')) {
                 return '[LMB] = Shoot Wire\n[RMB] = Cut Wire\n[SPACE] = Swing Jump';
@@ -818,6 +833,9 @@ export class LDtkLevel extends Level {
         if (rm.id === 'Level_11') {
             return { x: rm.worldX + 64, y: rm.worldY + 224 };
         }
+        if (rm.id === 'Level_12') {
+            return { x: rm.worldX + 64, y: rm.worldY + 128 };
+        }
         return { x: rm.worldX + 64, y: rm.worldY + 192 };
     }
 
@@ -907,6 +925,11 @@ export class LDtkLevel extends Level {
         // Update Drones
         for (const drone of this.drones) {
             drone.update(dt, player, input);
+        }
+
+        // Update Spaceship
+        if (this.spaceship) {
+            this.spaceship.update(dt, player, input);
         }
 
         // Animate all exit blast doors
@@ -1066,6 +1089,11 @@ export class LDtkLevel extends Level {
         // 7. Render Drones
         for (const drone of this.drones) {
             drone.render(ctx, camera);
+        }
+
+        // 7b. Render Spaceship
+        if (this.spaceship) {
+            this.spaceship.render(ctx, camera);
         }
 
         // 8. Room watermark in corner
