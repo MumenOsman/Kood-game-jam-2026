@@ -13,6 +13,6 @@ __pycache__/
 # Logs
 *.log
 
-# Scratch
-scratch/
+# Archives
+*.zip
 
