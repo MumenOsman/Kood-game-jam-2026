@@ -13,7 +13,7 @@ import { PauseMenu } from './PauseMenu.js?v=20261108_v11';
 import { OptionsMenu } from './OptionsMenu.js?v=20261108_v11';
 import { VictoryModal } from './VictoryModal.js?v=20261108_v11';
 import { CreditsScreen } from './CreditsScreen.js?v=20261108_v13';
-import { LevelSelectScreen } from './LevelSelectScreen.js?v=20261108_v17';
+import { LevelSelectScreen } from './LevelSelectScreen.js?v=20261108_v18';
 
 export class UIManager {
     constructor({ assetLoader, audioManager, saveManager, inputManager, onStartNewGame, onLoadGame, onSelectLevel, onRestartLevel, onRestartGame, onExitToMenu }) {
