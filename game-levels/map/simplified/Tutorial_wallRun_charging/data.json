@@ -1,0 +1,68 @@
+{
+	"identifier": "Tutorial_wallRun_charging",
+	"uniqueIdentifer": "aabeed40-bde0-11f1-a2c7-e7d2145f3f08",
+	"x": 1280,
+	"y": 0,
+	"width": 640,
+	"height": 320,
+	"bgColor": "#696A79",
+	"neighbourLevels": [
+		{
+			"levelIid": "8f10ab50-bde0-11f1-b860-a3534b8b5122",
+			"dir": "w"
+		},
+		{
+			"levelIid": "dd645c70-bde0-11f1-a2c7-c72e1f8ecf7f",
+			"dir": "e"
+		}
+	],
+	"customFields" : {},
+	"layers": [
+		"Factory2.png",
+		"Test_layer.png",
+		"Pipes.png"
+	],
+	"entities": {
+		"Wall_run": [
+			{
+				"id": "Wall_run",
+				"iid": "7c135310-bde0-11f1-a2c7-eb3d72e5de48",
+				"layer": "Wall_run",
+				"x": 160,
+				"y": 0,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "7e26f0d0-bde0-11f1-a2c7-a52bc7df8af4",
+				"layer": "Wall_run",
+				"x": 256,
+				"y": 96,
+				"width": 32,
+				"height": 128,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			}
+		],
+		"Socket_Battery": [
+			{
+				"id": "Socket_Battery",
+				"iid": "d37b4840-bde0-11f1-a2c7-dbd4cd9bbdf8",
+				"layer": "Socket_dials",
+				"x": 432,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 15389866,
+				"customFields" : {}
+			}
+		]
+	}
+}

@@ -140,11 +140,11 @@ Kood-game-jam-2026/
 ### 3.5. Modular Electrified Hazards & Objects (`HazardSystem.js` & `Level.js`)
 - Modular Hazard Architecture: Managed by `HazardSystem`, completely decoupled from specific room geometry. Any collider in any level with `isElectrified: true` acts as an active hazard.
 - Directional Faces Supported:
-  - `'right'`: Electric field along right edge; knockback repels player rightward (+360 px/s).
-  - `'left'`: Electric field along left edge; knockback repels player leftward (-360 px/s).
-  - `'top'`: Electric field along top edge (floors/rails); knockback blasts player upward (-380 px/s).
-  - `'bottom'`: Electric field along bottom edge (ceilings); knockback blasts player downward (+300 px/s).
-  - `'all'`: Electric field around entire perimeter; knockback repels omnidirectionally away from center.
+  - `'right'`: Knockback repels player rightward (+360 px/s).
+  - `'left'`: Knockback repels player leftward (-360 px/s).
+  - `'top'`: Knockback blasts player upward (-380 px/s).
+  - `'bottom'`: Knockback blasts player downward (+300 px/s).
+  - `'all'`: Knockback repels omnidirectionally away from collider center.
 - Shock Mechanics:
   - Battery Drain: Configurable `shockDamage` (default -8.0% battery power).
   - Knockback: Configurable `knockbackForce` (default 360 px/s).
@@ -154,52 +154,84 @@ Kood-game-jam-2026/
   - Listens to `ACTIVATE_DEVICE(deviceId)`: Sets matching colliders to `isElectrified: true`, bursting sparks.
   - Listens to `DEACTIVATE_DEVICE(deviceId)`: Sets matching colliders to `isElectrified: false`, bursting safe cyan sparks.
   - Listens to `TOGGLE_DEVICE(deviceId)`: Inverts electrification state.
-- Visual Effects: High-voltage animated double-phase lightning arcs (magenta `#ff4081` outer, cyan `#00e5ff` secondary, white core) with pulsating red hazard warning LEDs when active, and calm green LEDs when de-electrified.
+- Visual Effects:
+  - Clean authentic pixel art walls. Electrified wall visual overlays (pink neon glow backdrop, squiggly lightning arcs, and LED arrays) have been removed, preserving clean industrial aesthetic while maintaining full shock detection kinematics and damage physics.
 
 ### 3.6. DevTools & Debug Inspection Suite (`DevTools.js`)
 - Production Isolation Guard: Dynamically imported only when `IS_DEV` evaluates to true (`localhost`, `127.0.0.1`, or explicit `?debug=true` query param). In public itch.io production releases, debug code is never loaded or executed.
-- Toggle Hotkeys: Tilde / Backquote (`` ` `` / `~`) or `F1` toggles the entire DevTools overlay and tuning sidebar.
+- Toggle Hotkeys: Tilde / Backquote (`` ` `` / `~`) or `F1` toggles the entire DevTools overlay and tuning sidebar. Starts closed by default (`isEnabled = false`) to prevent accidental debug clutter on canvas.
 - Telemetry HUD: Real-time velocity (`vx`, `vy`), locomotion state (`GROUNDED`, `AIRBORNE`, `WALL_SLIDING`, `TETHERED`, `RESTING`), active timers (`coyoteTimer`, `jumpBufferTimer`, `wallCoyoteTimer`, `wallJumpLockTimer`), wire length, battery power, and mouse world coordinates.
 - Hitbox & Gizmo Visualizers:
   - Player AABB with state-dependent colors (green = grounded, cyan = airborne, amber = wall slide, magenta = shock invulnerable).
-  - Wall-run surfaces with 10px contact detection threshold margins.
+  - Wall-run surfaces with contact detection threshold margins.
   - Electrified hazards with active face indicators.
-  - Sockets with 30px magnetic latch capture radii and 280px / 500px wire range limits.
+  - Sockets with magnetic latch capture radii (large blue proximity circles disabled).
   - Pendulum radial constraint ring around active anchor socket.
 - Trajectory Path Tracer & Apex Marker: 180-frame historical trail rendering the exact parabolic curve of jumps and pendulum swings, marking jump apex height and horizontal distance span.
 - Interactive Distance Ruler: Hold `Shift` + `Right-Click` and drag to measure horizontal distance (`dx`), vertical height difference (`dy`), and Euclidean distance (`dist`) in pixels.
 - Live Physics Tuning Sidebar: Floating DOM drawer with live two-way bound sliders for walk/run speeds, acceleration, friction, ground jump, wall jump up/outward impulses, wall slide speeds, gravity, wire throw speeds, and reel speed. Includes a `[Copy Config]` button that exports calibrated JavaScript constants to clipboard.
 
-### 3.7. Pipe Flow System & LDtk Grid Lockdown (`PipeSystem.js` & `LDtkLevel.js`)
-- Universal LDtk Entity Pivot Calculation:
-  ```javascript
-  const topLeftX = worldX + ent.px[0] - (pivotX * w);
-  const topLeftY = worldY + ent.px[1] - (pivotY * h);
-  const centerX = topLeftX + w / 2;
-  const centerY = topLeftY + h / 2;
-  ```
-  - For entities with pivot `[0.5, 0.5]`, `ent.px` is already the entity's center. No `+ 16` offset is added.
-  - Sockets and circuit nodes receive `(centerX, centerY)`, while sprites drawing from top-left (`Drone`, `Logic_Gate`, `Light_Box`) receive `(topLeftX, topLeftY)`.
-  - Every entity occupies strictly one single $32\times32\text{ px}$ grid cube, centered precisely where placed in LDtk.
-- Pipe Flow Network Engine (`PipeSystem.js`):
-  - Extracts and renders all 19 tiles on the `Pipes` layer from `map.ldtk` (`circuits_sheet`).
-  - Classifies conduits into vertical (`[96, 64]`), horizontal (`[0, 64]`, `[32, 96]`), and corner bends (`[64, 128]` for Right/Bottom, `[0, 128]` for Left/Bottom).
-- Multi-Layer Visual Pipeline ("With Lights and Everything"):
-  - Base metal conduit casing from `circuits.png`.
-  - Molten golden lumen channel (`#ffba00`) with ultra-bright filament core (`#fff8cc`) when energized.
-  - Continuous traveling high-voltage dashed plasma pulses (`#ffffff` / `#ffe066`) streaming continuously along each pipe in the direction of power flow.
-  - Seamless 90-degree corner light rounding without sprite clipping.
-  - Tactile micro-sparks and coupling joint indicator LEDs.
-  - Recessed armored wall conduit bridge spanning Chamber 1 to Chamber 2 across the vertical hazard shaft.
-- Facility Circuit Propagation & Puzzle Logic:
-  - Ceiling Power Feed: Column 6 (`1472, 0..96`) is permanently energized by the facility generator.
-  - Dial 0 (CORNER at 1488, 144): Connects Top to Right, feeding the horizontal exit pipe and the wall conduit to Chamber 2.
-  - Dial Bus (Dials 1..4): Daisy-chained power bus feeding into `OR Gate 1` and `OR Gate 2`.
-  - Logic Gates: `AND Gate` activates when both `OR Gate 1` and `OR Gate 2` conditions are satisfied.
-  - Door Trunk Line: Transmits electricity down into the status light box and blast door.
-  - Light Box: Features a heavy-duty metallic box (`circuits.png` `[0, 160]`) with a dual-state status diode (Crimson Red with slow breathing pulse when locked; radiant Cyber Green with downward ambient glow when online).
-  - Solid Blast Door: `LDtkLevel.getSolidColliders()` physically blocks player passage until the circuit puzzle is solved and the door slides open.
-  - Dial Rotation Access: Pressing [E] rotates a dial both when tethered via wire and when standing adjacent to the dial (within 42px).
+### 3.7. Generic 2D Spatial Grid Electrical Engine (`PipeSystem.js` & `LDtkLevel.js`)
+- Universal 2D Grid Architecture:
+  - Zero hardcoded room or tile coordinates in the power propagation engine.
+  - Dynamically indexes all conduits, dials, logic gates, devices, and hazards into a 2D spatial coordinate map (`Map<"gx,gy", Item[]>`) keyed by integer grid cell coordinates ($gx = \text{round}(x / 32)$, $gy = \text{round}(y / 32)$).
+  - Standardized 4-port cardinal interface: `[Top, Right, Bottom, Left]` (`PORT.TOP = 0`, `PORT.RIGHT = 1`, `PORT.BOTTOM = 2`, `PORT.LEFT = 3`).
+- Power Propagation & Multi-Pass Wavefront:
+  - BFS queue seeded from ceiling generator feeds ($gy = 0, \text{ports}[TOP] = \text{true}$) and explicit generator sources.
+  - Power flows across touching adjacent tiles if and only if both connecting cardinal ports match (`curr.ports[p] && neighbor.ports[oppPort]`).
+  - Seamless Adjacent Dial Transfer: Touching adjacent circuit dials (e.g. Dials 1..4 at $gx = 55, 56, 57, 58$) automatically transfer power from one to the next when their touching ports are open.
+  - Multi-pass cascade loop (`while (changed && pass++ < 10)`) evaluates logic gates and propagates output signals downstream into gates, trunk lines, and devices in the same simulation tick.
+- Logic Gates (ANSI/IEEE Standard & Clean Light State):
+  - Supported Gate Types: `AND`, `OR`, `XOR`, `NOT`, `NAND`, `NOR`.
+  - Gate Flow Ports: Logic gates only emit electrical signals through designated `outPorts` (never leaking backwards into `inPorts`).
+  - Exclusive OR Logic: In accordance with facility puzzle mechanics, `OR` gates evaluate as exclusive:
+    - 0 active inputs: Output 0 (OFF / Inactive).
+    - Exactly 1 active input: Output 1 (ON / Energized).
+    - 2 or more active inputs: Output 0 (OFF / Overloaded CONFLICT state).
+  - Clean Visual Illumination:
+    - When Disconnected / Cutoff / Conflict: Electrical gates completely shut off their lights. Diode is dark unlit slate (`#223142`), symbol is unlit metallic slate (`#41556e`), and typography is muted (`#5a738f`). Zero neon bloom, zero glowing halos.
+    - When Powered: Clean green status LED diode (`#00e676`) and illuminated cyan vector display (`#00ddff`) with white core highlight (`#ffffff`), rendered cleanly with zero neon blur or canvas shadow wash.
+- Natural Physics Device Actuation:
+  - Hazards: Natural intuitive physics -> hazard receives electricity $\implies$ electrified (`isElectrified = true`). Cutting off power $\implies$ de-electrified (`isElectrified = false`), making the wall safe for climbing.
+  - Blast Doors: Open when power reaches them through conduits or indicator lightboxes.
+  - Lightboxes: Solid status diodes without ambient neon wash: solid green when online (`#00cc66`), solid muted red when locked (`#881824`).
+- Visual Pipeline & Conduits (Exclusive Luminous Element):
+  - In strict compliance with art direction, the electrified pipes are the **sole elements that retain the glowing energized aesthetic**:
+    - Molten golden lumen channel (`#ffba00`) with ultra-bright filament core (`#fff8cc`).
+    - Traveling high-voltage pulses streaming in the flow direction.
+    - Seamless 90-degree corner light rounding without clipping.
+  - All non-pipe elements (walls, background, sockets, anchors, chargers, disconnected gates) maintain a crisp, grounded pixel art presentation.
+
+### 3.8. Static Laser Hazard Engine (`HazardSystem.js`)
+- Visual Design (Compliant with Project Visual Policy):
+  - Zero artificial neon bloom, zero canvas `shadowBlur`, and zero moving lightning squiggles.
+  - Active electrified hazards render a crisp, high-voltage red laser beam along designated active edges (`top/up`, `bottom/down`, `left`, `right`, or `all/all_sides`).
+  - Outer Laser Line: `#d62828`, 3.0px width, crisp edge definition.
+  - Inner High-Intensity Core: `#fff0f3`, 1.2px width, white-pink electrical core.
+  - Emitter Node End-Caps: Industrial dark chassis square (`#1c2430`, 6x6px) with embedded laser diode (`#d62828`, 3x3px) at start and end terminals of each segment.
+  - Linear Traveling Current Pulse: Subtle linear white micro-pulses (`#ffffff`, 3x3px) traveling continuously at 120 px/s along the laser channel, creating tactile sense of current without any shape warping or jitter.
+  - De-energized State: When power is cut or de-routed, the laser beam turns completely off (zero overlay, completely safe for climbing and passage).
+
+### 3.9. Multi-Room Facility Architecture & Instant Camera Cut (`LDtkLevel.js` & `Camera.js`)
+- Multi-Room Layout:
+  - Supports 2D grid coordinates for rooms, including horizontal chains and vertically stacked sectors:
+    - Room 0: `Tutorial_jump` ($x = 0, y = 0, 640 \times 320$)
+    - Room 1: `Tutorial_Swing` ($x = 640, y = 0, 640 \times 320$)
+    - Room 2: `Tutorial_wallRun_charging` ($x = 1280, y = 0, 640 \times 320$)
+    - Room 3: `And_gate` ($x = 1920, y = 0, 640 \times 320$)
+    - Room 4: `And_gate_2` ($x = 2560, y = 0, 640 \times 320$)
+    - Room 5: `And_gate_3` ($x = 3200, y = 0, 640 \times 320$)
+    - Room 6: `And_gate_3_above` ($x = 3200, y = -320, 640 \times 320$) - Vertically stacked upper control sector!
+- Instant Camera Room Cut:
+  - Camera tracks active room based on 2D player bounding box $(x, y)$.
+  - Room boundary transition executes an instant cut (`this.x = this.targetX; this.y = this.targetY;`), snapping camera position directly to the active room without interpolation lag or float jitter.
+- Dedicated Room Checkpoints:
+  - Entering any room sets an entrance checkpoint platform.
+  - Fall-out-of-bounds safety respawns the player at the active room's entrance checkpoint (Room 0..5: `x = worldX + 64, y = 192`; Room 6: `x = 3680, y = -128` on the shaft landing platform).
+- Multi-Door Support:
+  - Supports multiple independent blast doors across rooms (`this.doors`), each tracked and animated individually (`openProgress`), with solid collision blocking until retracted.
+- Universal Power Sources:
+  - Explicit `Power_source` entities placed on 32px grid tiles seed the BFS wavefront engine and render industrial generator fixtures with amber status diodes and `PWR` badges.
 
 ---
 
@@ -253,14 +285,15 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 
 | Input | Action |
 |---|---|
-| A / D | Walk Left / Right |
+| A / D | Walk Left / Right (Aerial steering active mid-air; locked out during wall hold) |
 | Shift + A / D | Run Left / Right |
 | Space | Jump from ground / Mid-air Tether Jump / Wall Jump (only Space wall jumps) |
-| S | Dock / Rest (on ground) / Fast Slide (when attached to wall) |
-| Hold LMB | Aim and spin head plug, previewing parabolic trajectory arc |
-| Release LMB | Launch plug projectile along arc |
+| S | Dock / Rest (on ground) / Slide Down (when holding on wall) |
+| Hold LMB | Aim and spin head plug, previewing straight trajectory |
+| Release LMB | Launch plug projectile towards cursor |
 | RMB | Cut / unplug wire cleanly without jump boost |
-| W / S (airborne) | Reel wire in / out |
+| W / S (airborne tether) | Reel wire in / out |
+| A / D (airborne tether) | Directional swing pump acceleration |
 | E | Rotate connected circuit junction 90 degrees clockwise |
 
 ---
@@ -279,5 +312,53 @@ Based on `Initial files/Initial-level-game-mechanics-test.png` and `media_179372
 - 2026-11-03: Implemented isolated DevTools & Debug System (DevTools.js): gated by IS_DEV environment check, toggleable via `~` or F1. Features real-time kinematics telemetry HUD, hitbox and socket constraint gizmos, jump trajectory and apex tracer, Shift+RMB interactive pixel distance ruler, and live DOM physics tuning panel with clipboard preset export.
 - 2026-11-07: Completed Stage 1 & 2: Locked player physical bounds strictly to 32x32 px with HD 192x192 supersampled sprite rendering (Hero-v2.png), deterministic 2-square jump apex and span kinematics, DevTools calibrated in squares, authentic 32x32 animated pixel-art drones (Drones +.png), rotatable dials (Circuits(4).png), logic gates (Gates.png), and sockets.
 - 2026-11-07: Completed Stage 3: Resolved LDtk entity pivot math (topLeft = worldX + px - pivot * w; center = topLeft + w/2), locking all dials, sockets, anchors, chargers, drones, gates, and light boxes into single 32px cubes. Built PipeSystem.js parsing all 19 tiles from map.ldtk Pipes layer, rendering molten golden lumen illumination, continuous traveling light pulses streaming in flow direction, smooth 90-degree corner light rounding, micro-sparks, dynamic circuit power propagation from ceiling generator through dials and logic gates (OR, AND) to the exit blast door and status light box, with physical solid door collider blocking player passage when closed.
+- 2026-11-07: Decoupled Chamber 1 and Chamber 2 power systems: removed artificial cross-room wallConduit cutting through the laser hazard and middle pillar. Connected Chamber 1 Dial 0 directly to the shaft hazard cutoff terminal, allowing safe de-electrification for climbing. Added an independent ceiling power intake feed for Chamber 2 descending along the left wall (1728) with an industrial ceiling generator fixture to power Dials 1..4 autonomously. Replaced low-resolution 32px logic gate sprites with a resolution-independent, anti-aliased vector rendering engine featuring ANSI/IEEE standard logic signs (AND, OR, NOT, NAND, NOR, XOR), industrial chamfered bezels, corner micro-screws, status LED diodes, and crisp high-contrast typography. Bumped cache-busting version headers to v=20261107_v8.
+- 2026-11-07: Refined Movement Mechanics (Brawlhalla Reference & Tether Momentum):
+  1. Fixed tether swinging deceleration bug: eliminated mid-air horizontal clamping (`JUMP_HORIZONTAL_SPEED` = 103 px/s) while tethered (`!p.isTethered`), allowing natural high-speed pendulum momentum to remain intact.
+  2. Implemented active directional swing pumping in `WireSystem.js`: holding A/D adds tangential acceleration along circular arc (`SWING_PUMP_ACCEL = 420 px/s²`, capped at 400 px/s for smooth control).
+  3. Preserved airborne high-speed momentum on swing release and wall kick leaps, allowing air drag decay rather than harsh speed truncation.
+  4. Implemented Continuous Tactile Wall Slide & Anti-Bounce Window in `PlayerMovement.js`:
+     - Continuous downward slide: player steadily descends at 90 px/s (never frozen in air); holding Down/S fast-slides at 280 px/s.
+     - Tactile contact cushion: momentary 90ms initial cushion (30 px/s) upon catching a wall mid-flight.
+     - Anti-bounce gate: clears airborne pre-contact Space jump buffers upon touching a new wall face, preventing immediate accidental bouncing and requiring a fresh Space tap while on the wall.
+     - Ground jump wall grace: standing on the ground adjacent to a wall and pressing Space performs a full, unimpeded 2-tile ground jump (p.groundJumpWallGraceTimer = 0.28s), completely preventing the player from sticking to the wall during ground jump ascent.
+     - Balanced wall jump arc: tuned outward velocity to 230 px/s and upward impulse to -460 px/s for graceful, readable parabolic trajectories across vertical shafts.
+     - Directional lockout preserved: A/D cannot peel player horizontally off the wall line.
+  5. Updated DevTools telemetry, HUD prompt (`[Space] Wall Jump | Hold [S] Fast Slide`), and cache busters to v=20261107_v13. Verified via headless Chrome CDP automated test suite.
+- 2026-11-07: Completed 7-Room Full Facility Expansion & Laser Hazard Engine (/goal):
+  1. Loaded and verified all 7 rooms authored in `game-levels/map.ldtk` (`Tutorial_jump`, `Tutorial_Swing`, `Tutorial_wallRun_charging`, `And_gate`, `And_gate_2`, `And_gate_3`, `And_gate_3_above` at $y = -320$).
+  2. Implemented Instant Room Cut in `Camera.js`: camera instantly snaps to active 2D room bounding boxes without slide lag or off-screen drifting.
+  3. Implemented Room Checkpoints in `LDtkLevel.js` & `main.js`: fall recovery returns player safely to the active room's entrance platform.
+  4. Implemented Multi-Door Architecture in `LDtkLevel.js` and `PipeSystem.js`: individual blast doors animate and actuate independently.
+  5. Implemented Static Laser Hazard Engine in `HazardSystem.js`: crisp static red line (`#d62828`, `#fff0f3` core) with emitter end-caps and linear traveling current pulses, zero lightning squiggles, zero neon glow blur. Fixed collider filtering so only authentic hazard entities electrify.
+  6. Verified all puzzles end-to-end via Headless Chrome DevTools Protocol (CDP) automated test suite:
+     - Room 3: Solved AND gate opens Chamber blast door (`door_2176_128`).
+     - Room 4: Hazard laser de-electrified when circuit is severed; safe for climbing.
+     - Room 6: Solved cascading matrix of OR and AND gates, successfully opening the final facility blast door (`door_3776_-224`).
+     - Visual artifacts captured and confirmed compliant with `AGENTS.md` invariants.
+- 2026-11-07: Updated Wall Placement & Traversal in Room 2 (`Tutorial_wallRun_charging`):
+  1. Synchronized engine with user's LDtk map updates:
+     - Wall 1: local `[160, 32]`, world `[1440, 32]`, size `[32, 128]`, `Face: BOTH`
+     - Wall 2: moved 32px right from `x=224` to local `[256, 96]`, world `[1536, 96]`, size `[32, 128]`, `Face: BOTH`
+     - Created a clean 64px (2 full 32px grid tiles) gap between Wall 1 and Wall 2, aligning with the platformer's 2-square horizontal wall-jump span.
+  2. Implemented dynamic cache-busting (`?t=${Date.now()}`) in `LDtkLevel.js` for instant hot asset updates of `map.ldtk` and composite room PNGs.
+  3. Verified wall mechanics across the new gap via CDP simulation:
+     - Leaping from Wall 1 at mid-height reaches and securely latches onto Wall 2 (`x = 1504, y = 104.7`).
+     - Leaping higher up on Wall 1 cleanly clears over Wall 2 ($y < 96$) into the charger chamber.
+     - Anti-bounce gate and continuous controlled slide remain 100% stable. Visual rendering verified cleanly.
+- 2026-11-07: Fixed Wire Reel-In (W), Ground Tension Desync, and Collision Solver Teleportation Bugs:
+  1. Root cause: All circuit dials are embedded inside solid geometry (`isSockInsideSolid: true`). Holding 'W' reeled in to 20px, pulling the player inside solid blocks without collision checks; holding 'W' while grounded desynced `tetherLength` down to 20px while 60px away, turning jump into a high-speed slingshot. In `_resolveCollisions()`, a horizontal blind spot when $v_x = 0$ caused the solver to treat side-wall penetrations as floor landings, catapulting the player through ceilings to the top of the map.
+  2. Maintained universal swingability: all sockets (anchors, dials, chargers) remain 100% swingable and hangable.
+  3. Implemented collision-aware position resolution in `WireSystem.js`:
+     - Distance constraint moves along deltaX and deltaY with AABB collision detection against level solids.
+     - When stopped by solid geometry, `p.tetherLength` is clamped to contact distance so the rope stops pulling.
+     - Ground safety: while grounded, holding 'W' cannot shrink `p.tetherLength` below current physical distance.
+     - Directional swing pumping is strictly bounded to hanging arcs (`ny > 0`).
+  4. Hardened `PlayerMovement.js` `_resolveCollisions()`:
+     - Resolved $v_x = 0$ and $v_y = 0$ overlaps along shallowest penetration axis (Minimum Translation Vector) rather than assuming vertical platform landing.
+     - Added active room ceiling boundary clamping (`p.y >= activeRoom.worldY`).
+  5. Bumped cache-busting version headers to `v=20261107_v15`. Verified end-to-end via CDP automated test suite and captured clean screenshot (`room6_tether_clean.png`).
+
+
 
 
