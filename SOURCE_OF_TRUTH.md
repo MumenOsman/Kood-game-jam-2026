@@ -1,4 +1,4 @@
-# SOURCE OF TRUTH: 2D Tether Puzzle Platformer
+# SOURCE OF TRUTH: TetherMind
 
 This document is the persistent source of truth for the project. It must be consulted and updated whenever features, architecture, mechanics, or configurations are modified, ensuring seamless continuity across development sessions.
 

@@ -8,11 +8,11 @@
  * - OPTIONS
  */
 import { UITheme } from './UITheme.js?v=20261108_v11';
-import { MainMenu } from './MainMenu.js?v=20261108_v11';
+import { MainMenu } from './MainMenu.js?v=20261108_v13';
 import { PauseMenu } from './PauseMenu.js?v=20261108_v11';
 import { OptionsMenu } from './OptionsMenu.js?v=20261108_v11';
 import { VictoryModal } from './VictoryModal.js?v=20261108_v11';
-import { CreditsScreen } from './CreditsScreen.js?v=20261108_v12';
+import { CreditsScreen } from './CreditsScreen.js?v=20261108_v13';
 
 export class UIManager {
     constructor({ assetLoader, audioManager, saveManager, inputManager, onStartNewGame, onLoadGame, onRestartLevel, onRestartGame, onExitToMenu }) {

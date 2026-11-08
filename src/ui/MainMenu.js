@@ -94,11 +94,11 @@ export class MainMenu {
 
         // 1px Pixel drop shadow
         ctx.fillStyle = '#05070a';
-        ctx.fillText('TETHER PLATFORMER', 640 + 2, 175 + 2);
+        ctx.fillText('TETHERMIND', 640 + 2, 175 + 2);
 
         // Amber pixel header
         ctx.fillStyle = '#f4b03c';
-        ctx.fillText('TETHER PLATFORMER', 640, 175);
+        ctx.fillText('TETHERMIND', 640, 175);
 
         // 2. Central Window Frame
         const frameW = 400;

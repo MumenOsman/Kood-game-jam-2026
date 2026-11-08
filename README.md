@@ -1,4 +1,4 @@
-# 2D Tether Puzzle Platformer
+# TetherMind
 
 Created for the **//kood Game Jam [Platformers] 2026**.
 

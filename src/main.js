@@ -21,7 +21,7 @@ import { LDtkLevel } from './levels/LDtkLevel.js?v=20261108_v11';
 import { HUD } from './ui/HUD.js?v=20261108_v11';
 import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
 import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
-import { UIManager } from './ui/UIManager.js?v=20261108_v12';
+import { UIManager } from './ui/UIManager.js?v=20261108_v13';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
@@ -141,12 +141,8 @@ async function bootstrap() {
     eventBus.on('PLAYER_LASER_CONTACT', () => respawnPlayer('LASER'));
     eventBus.on('PLAYER_BATTERY_DEPLETED', () => respawnPlayer('BATTERY_DEPLETED'));
 
-    // 6. DevTools / Debug System (Development & Localhost Only - Never loaded in production)
-    const IS_DEV = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.search.includes('debug=true')
-    );
+    // 6. DevTools / Debug System (Disabled for clean production release)
+    const IS_DEV = false;
 
     let devTools = null;
     if (IS_DEV) {
