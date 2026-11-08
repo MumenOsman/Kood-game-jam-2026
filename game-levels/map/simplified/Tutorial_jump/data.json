@@ -22,20 +22,21 @@
 		"Drone": [
 			{
 				"id": "Drone",
-				"iid": "ea2b79d0-bde0-11f1-a2c7-3f3c9bd04ef0",
+				"iid": "a8e248f0-bde0-11f1-a2c7-a58b02591c37",
 				"layer": "Socket_dials",
-				"x": 112,
+				"x": 144,
 				"y": 176,
 				"width": 32,
 				"height": 32,
 				"color": 1199753,
 				"customFields": {
-					"Drone_Type": "Tutorial_Drone"
+					"Drone_Type": "Heavy_Drone",
+					"Context": "Move buttons"
 				}
 			},
 			{
 				"id": "Drone",
-				"iid": "efcea6f0-bde0-11f1-a2c7-e926c6577a53",
+				"iid": "91ac3fa0-bde0-11f1-a2c7-b107e0504608",
 				"layer": "Socket_dials",
 				"x": 400,
 				"y": 144,
@@ -43,7 +44,8 @@
 				"height": 32,
 				"color": 1199753,
 				"customFields": {
-					"Drone_Type": "Tutorial_Drone"
+					"Drone_Type": "Heavy_Drone",
+					"Context": "jump button"
 				}
 			}
 		],

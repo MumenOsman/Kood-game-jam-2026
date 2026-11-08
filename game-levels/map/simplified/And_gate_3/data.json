@@ -14,6 +14,10 @@
 		{
 			"levelIid": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
 			"dir": "n"
+		},
+		{
+			"levelIid": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
+			"dir": "ne"
 		}
 	],
 	"customFields" : {},
@@ -71,19 +75,6 @@
 				"y": 96,
 				"width": 32,
 				"height": 64,
-				"color": 58879,
-				"customFields": {
-					"Face": "BOTH"
-				}
-			},
-			{
-				"id": "Wall_run",
-				"iid": "bdc02380-bde0-11f1-a2c7-e74d556aeb5d",
-				"layer": "Wall_run",
-				"x": 416,
-				"y": 96,
-				"width": 32,
-				"height": 96,
 				"color": 58879,
 				"customFields": {
 					"Face": "BOTH"
@@ -147,6 +138,21 @@
 				"color": 14120515,
 				"customFields": {
 					"Socket_Dial": "CORNER",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9db8dcd0-bde0-11f1-a2c7-1f798da99f8c",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 16,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "STRAIGHT",
 					"initialRotation": 0,
 					"targetDevice": null
 				}

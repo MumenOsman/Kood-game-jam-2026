@@ -63,6 +63,36 @@
 				"color": 15389866,
 				"customFields" : {}
 			}
+		],
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "7cbb7d50-bde0-11f1-a2c7-a70788486dc5",
+				"layer": "Socket_dials",
+				"x": 112,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone",
+					"Context": "wall run"
+				}
+			},
+			{
+				"id": "Drone",
+				"iid": "81f2c940-bde0-11f1-a2c7-7f16e0550c92",
+				"layer": "Socket_dials",
+				"x": 432,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone",
+					"Context": "charging"
+				}
+			}
 		]
 	}
 }

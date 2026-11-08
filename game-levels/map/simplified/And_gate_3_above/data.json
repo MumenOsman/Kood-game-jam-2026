@@ -14,6 +14,10 @@
 		{
 			"levelIid": "2a007760-bde0-11f1-a2c7-d5c337fda986",
 			"dir": "s"
+		},
+		{
+			"levelIid": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
+			"dir": "e"
 		}
 	],
 	"customFields" : {},
@@ -29,9 +33,9 @@
 				"iid": "891eefe0-bde0-11f1-a2c7-b9b43fef60b8",
 				"layer": "Wall_run",
 				"x": 0,
-				"y": 32,
+				"y": 64,
 				"width": 32,
-				"height": 256,
+				"height": 224,
 				"color": 58879,
 				"customFields": {
 					"Face": "BOTH"
@@ -68,7 +72,20 @@
 				"iid": "8e2b8250-bde0-11f1-a2c7-9906ebff3d5f",
 				"layer": "Wall_run",
 				"x": 288,
-				"y": 32,
+				"y": 64,
+				"width": 32,
+				"height": 32,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "985a11e0-bde0-11f1-a2c7-552e09b8f271",
+				"layer": "Wall_run",
+				"x": 576,
+				"y": 160,
 				"width": 32,
 				"height": 64,
 				"color": 58879,
@@ -112,7 +129,7 @@
 				"height": 32,
 				"color": 39387,
 				"customFields": {
-					"GateType": "OR",
+					"GateType": "XOR",
 					"orientation": 0
 				}
 			},
@@ -126,7 +143,7 @@
 				"height": 32,
 				"color": 39387,
 				"customFields": {
-					"GateType": "OR",
+					"GateType": "XOR",
 					"orientation": 0
 				}
 			},
@@ -140,7 +157,7 @@
 				"height": 32,
 				"color": 39387,
 				"customFields": {
-					"GateType": "OR",
+					"GateType": "XOR",
 					"orientation": 0
 				}
 			},
@@ -342,6 +359,49 @@
 					"id": null,
 					"startsOpen": false
 				}
+			}
+		],
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "11a289e0-bde0-11f1-a2c7-c92591df3d69",
+				"layer": "Socket_dials",
+				"x": 176,
+				"y": 272,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone",
+					"Context": "XOR gate"
+				}
+			},
+			{
+				"id": "Drone",
+				"iid": "b7835730-bde0-11f1-a2c7-0d0e7d7aa965",
+				"layer": "Socket_dials",
+				"x": 400,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Heavy_Drone",
+					"Context": "Hint that a player can use the circuits to hang and move"
+				}
+			}
+		],
+		"Socket_Battery": [
+			{
+				"id": "Socket_Battery",
+				"iid": "38d6cf30-bde0-11f1-a2c7-c14d125b3983",
+				"layer": "Socket_dials",
+				"x": 208,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 15389866,
+				"customFields" : {}
 			}
 		]
 	}

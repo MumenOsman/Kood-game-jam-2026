@@ -1,0 +1,376 @@
+{
+	"identifier": "Level_7",
+	"uniqueIdentifer": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
+	"x": 3840,
+	"y": -320,
+	"width": 640,
+	"height": 320,
+	"bgColor": "#696A79",
+	"neighbourLevels": [
+		{
+			"levelIid": "2a007760-bde0-11f1-a2c7-d5c337fda986",
+			"dir": "sw"
+		},
+		{
+			"levelIid": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
+			"dir": "w"
+		}
+	],
+	"customFields" : {},
+	"layers": [
+		"Factory2.png",
+		"Test_layer.png",
+		"Pipes.png"
+	],
+	"entities": {
+		"Wall_run": [
+			{
+				"id": "Wall_run",
+				"iid": "0fe24070-bde0-11f1-a2c7-67db393e9b9c",
+				"layer": "Wall_run",
+				"x": 160,
+				"y": 0,
+				"width": 32,
+				"height": 224,
+				"color": 58879,
+				"customFields": {
+					"Face": "LEFT"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "11ec8f60-bde0-11f1-a2c7-19819ee18b14",
+				"layer": "Wall_run",
+				"x": 64,
+				"y": 160,
+				"width": 32,
+				"height": 128,
+				"color": 58879,
+				"customFields": {
+					"Face": "RIGHT"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "13c4d1d0-bde0-11f1-a2c7-378a7b2695c8",
+				"layer": "Wall_run",
+				"x": 64,
+				"y": 0,
+				"width": 32,
+				"height": 96,
+				"color": 58879,
+				"customFields": {
+					"Face": "RIGHT"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "15b3d090-bde0-11f1-a2c7-e5a63949dd3e",
+				"layer": "Wall_run",
+				"x": 480,
+				"y": 96,
+				"width": 32,
+				"height": 128,
+				"color": 58879,
+				"customFields": {
+					"Face": "RIGHT"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "16ec9eb0-bde0-11f1-a2c7-8f25d27c8ba2",
+				"layer": "Wall_run",
+				"x": 576,
+				"y": 96,
+				"width": 32,
+				"height": 128,
+				"color": 58879,
+				"customFields": {
+					"Face": "LEFT"
+				}
+			}
+		],
+		"Socket_Dial": [
+			{
+				"id": "Socket_Dial",
+				"iid": "990f4960-bde0-11f1-a2c7-b5b9203decec",
+				"layer": "Socket_dials",
+				"x": 176,
+				"y": 48,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9abd6e90-bde0-11f1-a2c7-5d5b18162ac1",
+				"layer": "Socket_dials",
+				"x": 176,
+				"y": 112,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9b5c6db0-bde0-11f1-a2c7-03d4ca1e1437",
+				"layer": "Socket_dials",
+				"x": 176,
+				"y": 176,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9c713910-bde0-11f1-a2c7-1b159d6e6d93",
+				"layer": "Socket_dials",
+				"x": 240,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9d77fab0-bde0-11f1-a2c7-cddcfe31811e",
+				"layer": "Socket_dials",
+				"x": 304,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "9f32f120-bde0-11f1-a2c7-555bd8ff04e3",
+				"layer": "Socket_dials",
+				"x": 368,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "a207bc00-bde0-11f1-a2c7-c9468a90e2a1",
+				"layer": "Socket_dials",
+				"x": 496,
+				"y": 176,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "a317cc70-bde0-11f1-a2c7-9db3be34df65",
+				"layer": "Socket_dials",
+				"x": 496,
+				"y": 112,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "c21218b0-bde0-11f1-a2c7-d5b0dff76770",
+				"layer": "Socket_dials",
+				"x": 80,
+				"y": 80,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			}
+		],
+		"Power_source": [
+			{
+				"id": "Power_source",
+				"iid": "bd485ba0-bde0-11f1-a2c7-c37aa89c3d43",
+				"layer": "Socket_dials",
+				"x": 0,
+				"y": 64,
+				"width": 32,
+				"height": 32,
+				"color": 12635100,
+				"customFields" : {}
+			}
+		],
+		"Logic_Gate": [
+			{
+				"id": "Logic_Gate",
+				"iid": "c4f33fa0-bde0-11f1-a2c7-d78b6bab5155",
+				"layer": "Socket_dials",
+				"x": 80,
+				"y": 16,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "OR",
+					"orientation": 0
+				}
+			},
+			{
+				"id": "Logic_Gate",
+				"iid": "11aac410-bde0-11f1-a2c7-b3989deb6f17",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 80,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "OR",
+					"orientation": 0
+				}
+			},
+			{
+				"id": "Logic_Gate",
+				"iid": "1245cb90-bde0-11f1-a2c7-4d99efc104b4",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "AND",
+					"orientation": 0
+				}
+			},
+			{
+				"id": "Logic_Gate",
+				"iid": "1328d890-bde0-11f1-a2c7-b996b00d5e3c",
+				"layer": "Socket_dials",
+				"x": 400,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "OR",
+					"orientation": 0
+				}
+			},
+			{
+				"id": "Logic_Gate",
+				"iid": "13b58830-bde0-11f1-a2c7-f75010914694",
+				"layer": "Socket_dials",
+				"x": 400,
+				"y": 80,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "AND",
+					"orientation": 0
+				}
+			},
+			{
+				"id": "Logic_Gate",
+				"iid": "1649a090-bde0-11f1-a2c7-21d205fd2dd4",
+				"layer": "Socket_dials",
+				"x": 496,
+				"y": 48,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "AND",
+					"orientation": 0
+				}
+			}
+		],
+		"Light_Box": [
+			{
+				"id": "Light_Box",
+				"iid": "0a79ae80-bde0-11f1-a2c7-97e256144d0e",
+				"layer": "Socket_dials",
+				"x": 624,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 16711680,
+				"customFields": {
+					"Color": "#FF0000"
+				}
+			}
+		],
+		"Hazard_Electric": [
+			{
+				"id": "Hazard_Electric",
+				"iid": "0fe996a0-bde0-11f1-a2c7-1311892f0d6d",
+				"layer": "Socket_dials",
+				"x": 608,
+				"y": 224,
+				"width": 32,
+				"height": 64,
+				"color": 16717636,
+				"customFields": {
+					"deviceId": null,
+					"Face": "All_sides",
+					"isWallRunnable": false,
+					"shockDamage": 8
+				}
+			}
+		],
+		"Socket_Battery": [
+			{
+				"id": "Socket_Battery",
+				"iid": "1d8e0520-bde0-11f1-a2c7-4bf38da1f2c2",
+				"layer": "Socket_dials",
+				"x": 592,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 15389866,
+				"customFields" : {}
+			}
+		]
+	}
+}
