@@ -8,14 +8,15 @@
  * - OPTIONS
  */
 import { UITheme } from './UITheme.js?v=20261108_v11';
-import { MainMenu } from './MainMenu.js?v=20261108_v16';
+import { MainMenu } from './MainMenu.js?v=20261108_v17';
 import { PauseMenu } from './PauseMenu.js?v=20261108_v11';
 import { OptionsMenu } from './OptionsMenu.js?v=20261108_v11';
 import { VictoryModal } from './VictoryModal.js?v=20261108_v11';
 import { CreditsScreen } from './CreditsScreen.js?v=20261108_v13';
+import { LevelSelectScreen } from './LevelSelectScreen.js?v=20261108_v17';
 
 export class UIManager {
-    constructor({ assetLoader, audioManager, saveManager, inputManager, onStartNewGame, onLoadGame, onRestartLevel, onRestartGame, onExitToMenu }) {
+    constructor({ assetLoader, audioManager, saveManager, inputManager, onStartNewGame, onLoadGame, onSelectLevel, onRestartLevel, onRestartGame, onExitToMenu }) {
         this.assetLoader = assetLoader;
         this.audio = audioManager;
         this.saveManager = saveManager;
@@ -23,13 +24,14 @@ export class UIManager {
 
         this.onStartNewGame = onStartNewGame;
         this.onLoadGame = onLoadGame;
+        this.onSelectLevel = onSelectLevel;
         this.onRestartLevel = onRestartLevel;
         this.onRestartGame = onRestartGame;
         this.onExitToMenu = onExitToMenu;
 
         this.theme = new UITheme(assetLoader);
 
-        this.state = 'MAIN_MENU'; // 'MAIN_MENU' | 'PLAYING' | 'PAUSED' | 'OPTIONS' | 'VICTORY' | 'CREDITS'
+        this.state = 'MAIN_MENU'; // 'MAIN_MENU' | 'PLAYING' | 'PAUSED' | 'OPTIONS' | 'VICTORY' | 'CREDITS' | 'LEVEL_SELECT'
         this.previousState = 'MAIN_MENU';
 
         // Child views
@@ -39,8 +41,17 @@ export class UIManager {
             saveManager: this.saveManager,
             onStartGame: () => this.handleStartGame(),
             onContinue: () => this.handleContinueGame(),
+            onSelectLevel: () => this.openLevelSelect(),
             onOptions: () => this.openOptions(),
             onCredits: () => this.openCredits()
+        });
+
+        this.levelSelectScreen = new LevelSelectScreen({
+            uiTheme: this.theme,
+            audioManager: this.audio,
+            saveManager: this.saveManager,
+            onSelectLevel: (idx) => this.handleSelectLevel(idx),
+            onBack: () => this.closeLevelSelect()
         });
 
         this.pauseMenu = new PauseMenu({
@@ -148,6 +159,27 @@ export class UIManager {
         this.state = 'PLAYING';
     }
 
+    openLevelSelect() {
+        this.previousState = this.state;
+        this.state = 'LEVEL_SELECT';
+        if (this.audio) this.audio.playFx('ui_click');
+    }
+
+    closeLevelSelect() {
+        this.state = this.previousState || 'MAIN_MENU';
+        if (this.audio) this.audio.playFx('ui_click');
+    }
+
+    handleSelectLevel(roomIndex) {
+        this.state = 'PLAYING';
+        if (this.audio) {
+            this.audio.playMusic('game_levels');
+        }
+        if (this.onSelectLevel) {
+            this.onSelectLevel(roomIndex);
+        }
+    }
+
     openOptions() {
         this.previousState = this.state;
         this.state = 'OPTIONS';
@@ -185,6 +217,9 @@ export class UIManager {
                     this.closeOptions();
                 }
                 return;
+            } else if (this.state === 'LEVEL_SELECT') {
+                this.closeLevelSelect();
+                return;
             } else if (this.state === 'CREDITS') {
                 this.handleExitToMainMenu();
                 return;
@@ -198,6 +233,8 @@ export class UIManager {
             this.pauseMenu.update(dt, this.input);
         } else if (this.state === 'OPTIONS') {
             this.optionsMenu.update(dt, this.input);
+        } else if (this.state === 'LEVEL_SELECT') {
+            this.levelSelectScreen.update(dt, this.input);
         } else if (this.state === 'VICTORY') {
             this.victoryModal.update(dt, this.input);
         } else if (this.state === 'CREDITS') {
@@ -212,6 +249,8 @@ export class UIManager {
             this.pauseMenu.render(ctx);
         } else if (this.state === 'OPTIONS') {
             this.optionsMenu.render(ctx);
+        } else if (this.state === 'LEVEL_SELECT') {
+            this.levelSelectScreen.render(ctx);
         } else if (this.state === 'VICTORY') {
             this.victoryModal.render(ctx);
         } else if (this.state === 'CREDITS') {

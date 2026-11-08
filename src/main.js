@@ -220,6 +220,27 @@ async function bootstrap() {
             player.battery = typeof saveData.battery === 'number' ? saveData.battery : 100;
             camera.snapTo(player.x, player.y);
         },
+        onSelectLevel: (roomIndex) => {
+            isGameCompleted = false;
+            wireSystem.disconnectWire();
+            const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, roomIndex || 0));
+            level.activeRoomIndex = targetIdx;
+            const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(targetIdx) : level.spawnPoint;
+            player.x = cp.x;
+            player.y = cp.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.battery = player.maxBattery || 100;
+            player.shockInvulnTimer = 0;
+            player.respawnBlinkTimer = 1.2;
+            camera.snapTo(player.x, player.y);
+            saveCurrentProgress();
+            if (audioManager) {
+                audioManager.resetVisitedRooms();
+            }
+            eventBus.emit('BATTERY_CHANGED', player.battery);
+            eventBus.emit('ROOM_CHANGED', { roomIndex: targetIdx, roomId: (level.rooms && level.rooms[targetIdx] && level.rooms[targetIdx].id) || `Room_${targetIdx}` });
+        },
         onRestartLevel: () => {
             respawnPlayer('RESTART');
         },
@@ -283,8 +304,13 @@ async function bootstrap() {
                 // Full gameplay physics kinematics, collisions, hazards, wire & entity updates
                 level.update(dt, player, input);
 
-                // Auto-save on room change
+                // Auto-save on room change & mark completed levels
                 if (level.activeRoomIndex !== lastSavedRoomIndex) {
+                    if (level.activeRoomIndex > 0) {
+                        for (let i = 0; i < level.activeRoomIndex; i++) {
+                            saveManager.markLevelCompleted(i);
+                        }
+                    }
                     lastSavedRoomIndex = level.activeRoomIndex;
                     saveCurrentProgress();
                 }
@@ -321,6 +347,7 @@ async function bootstrap() {
                     if (player.x >= exitThresholdX && player.y >= lastRoom.worldY && player.y <= lastRoom.worldY + lastRoom.pxHei + 20) {
                         if (!isGameCompleted) {
                             isGameCompleted = true;
+                            saveManager.markLevelCompleted(lastRoomIdx);
                             saveManager.clearSave();
                             wireSystem.disconnectWire();
                             level.activeRoomIndex = 0;

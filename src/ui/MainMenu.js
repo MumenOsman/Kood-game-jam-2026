@@ -5,13 +5,14 @@
  * Rendered using authentic pixel-art frames and buttons.
  */
 export class MainMenu {
-    constructor({ uiTheme, audioManager, saveManager, onStartGame, onContinue, onOptions, onCredits }) {
+    constructor({ uiTheme, audioManager, saveManager, onStartGame, onContinue, onSelectLevel, onOptions, onCredits }) {
         this.theme = uiTheme;
         this.audio = audioManager;
         this.saveManager = saveManager;
 
         this.onStartGame = onStartGame;
         this.onContinue = onContinue;
+        this.onSelectLevel = onSelectLevel;
         this.onOptions = onOptions;
         this.onCredits = onCredits;
 
@@ -60,6 +61,8 @@ export class MainMenu {
                 if (this.onStartGame) this.onStartGame();
             } else if (this.hoveredBtn === 'continue') {
                 if (this.onContinue) this.onContinue();
+            } else if (this.hoveredBtn === 'select_level') {
+                if (this.onSelectLevel) this.onSelectLevel();
             } else if (this.hoveredBtn === 'options') {
                 if (this.onOptions) this.onOptions();
             } else if (this.hoveredBtn === 'credits') {
@@ -70,19 +73,21 @@ export class MainMenu {
 
     _getButtonBounds(hasSave) {
         const cx = 1280 / 2;
-        const frameY = 225;
-        const frameH = 270;
+        const frameY = 215;
+        const frameH = 300;
         const btnW = 280;
         const btnH = 38;
-        const spacing = 14;
+        const spacing = 12;
 
         const buttonDefs = hasSave ? [
             { id: 'continue', text: 'CONTINUE', variant: 'amber' },
             { id: 'start', text: 'START NEW GAME', variant: 'slate' },
+            { id: 'select_level', text: 'SELECT LEVEL', variant: 'slate' },
             { id: 'options', text: 'OPTIONS', variant: 'slate' },
             { id: 'credits', text: 'CREDITS', variant: 'slate' }
         ] : [
             { id: 'start', text: 'START NEW GAME', variant: 'amber' },
+            { id: 'select_level', text: 'SELECT LEVEL', variant: 'slate' },
             { id: 'options', text: 'OPTIONS', variant: 'slate' },
             { id: 'credits', text: 'CREDITS', variant: 'slate' }
         ];
@@ -112,17 +117,17 @@ export class MainMenu {
 
         // 1px Pixel drop shadow
         ctx.fillStyle = '#05070a';
-        ctx.fillText('TETHERMIND', 640 + 2, 175 + 2);
+        ctx.fillText('TETHERMIND', 640 + 2, 165 + 2);
 
         // Amber pixel header
         ctx.fillStyle = '#f4b03c';
-        ctx.fillText('TETHERMIND', 640, 175);
+        ctx.fillText('TETHERMIND', 640, 165);
 
         // 2. Central Window Frame
         const frameW = 400;
-        const frameH = 270;
+        const frameH = 300;
         const frameX = 640 - frameW / 2;
-        const frameY = 225;
+        const frameY = 215;
         this.theme.drawFrame(ctx, frameX, frameY, frameW, frameH, 0);
 
         // 3. Buttons
