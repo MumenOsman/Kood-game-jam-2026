@@ -199,6 +199,12 @@ async function bootstrap() {
             wireSystem.disconnectWire();
             const startRoom = 0;
             level.activeRoomIndex = startRoom;
+            if (typeof level.resetAllCircuits === 'function') {
+                level.resetAllCircuits();
+            }
+            if (pipeSystem && typeof pipeSystem.recalculatePower === 'function') {
+                pipeSystem.recalculatePower();
+            }
             const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(startRoom) : { x: level.spawnPoint.x, y: level.spawnPoint.y };
             player.x = cp.x;
             player.y = cp.y;
@@ -225,6 +231,12 @@ async function bootstrap() {
             wireSystem.disconnectWire();
             const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, roomIndex || 0));
             level.activeRoomIndex = targetIdx;
+            if (typeof level.resetRoomCircuits === 'function') {
+                level.resetRoomCircuits(targetIdx);
+            }
+            if (pipeSystem && typeof pipeSystem.recalculatePower === 'function') {
+                pipeSystem.recalculatePower();
+            }
             const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(targetIdx) : level.spawnPoint;
             player.x = cp.x;
             player.y = cp.y;
@@ -248,6 +260,12 @@ async function bootstrap() {
             wireSystem.disconnectWire();
             const startRoom = 0;
             level.activeRoomIndex = startRoom;
+            if (typeof level.resetAllCircuits === 'function') {
+                level.resetAllCircuits();
+            }
+            if (pipeSystem && typeof pipeSystem.recalculatePower === 'function') {
+                pipeSystem.recalculatePower();
+            }
             const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(startRoom) : { x: level.spawnPoint.x, y: level.spawnPoint.y };
             player.x = cp.x;
             player.y = cp.y;

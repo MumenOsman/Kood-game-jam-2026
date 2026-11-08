@@ -304,9 +304,29 @@ export class LDtkLevel extends Level {
                         if ((relGx === 1 && relGy === 5) || (relGx === 14 && relGy === 2)) {
                             design = 'T_SHAPE';
                         }
+                        if (relGx === 14 && relGy === 1) {
+                            design = 'CROSS';
+                        }
                     }
                     const isSource = (design.toLowerCase() === 'source');
+                    const isCross = (design && design.toUpperCase() === 'CROSS');
                     let rot = fields.initialRotation || 0;
+                    if (lvl.identifier === 'Level_11') {
+                        const relGx = Math.round((ent.px[0] - (pivotX * w)) / 32);
+                        const relGy = Math.round((ent.px[1] - (pivotY * h)) / 32);
+                        const key = `${relGx},${relGy}`;
+                        const scrambleMap = {
+                            '4,8': 0, '4,6': 90, '4,4': 90,
+                            '6,8': 0,
+                            '17,8': 0, '17,6': 180,
+                            '1,5': 0, '1,3': 270,
+                            '8,1': 0, '9,2': 0, '9,4': 180, '9,6': 90,
+                            '14,2': 0, '14,3': 270, '14,5': 0
+                        };
+                        if (scrambleMap[key] !== undefined) {
+                            rot = scrambleMap[key];
+                        }
+                    }
                     // In And_gate_3, the 1-click bottom circuit dial starts horizontal (90 deg) so laser is active until clicked
                     if (lvl.identifier === 'And_gate_3' && Math.round(ent.px[0]) === 624 && Math.round(ent.px[1]) === 208 && rot === 0) {
                         rot = 90;
@@ -325,7 +345,7 @@ export class LDtkLevel extends Level {
                     }
 
                     let sock = null;
-                    if (!isSource) {
+                    if (!isSource && !isCross) {
                         sock = new Socket(`dial_sock_${centerX}_${centerY}`, centerX, centerY, 'CIRCUIT', {
                             label: design,
                             assetLoader: this.assetLoader
@@ -344,6 +364,7 @@ export class LDtkLevel extends Level {
                             type: isSource ? 'SOURCE' : 'JUNCTION',
                             design: design,
                             ports: this._getInitialPorts(design, rot),
+                            isRotatable: !isSource && !isCross,
                             rotationAngle: initialAngle,
                             targetRotationAngle: initialAngle,
                             deviceId: targetDev
@@ -798,6 +819,86 @@ export class LDtkLevel extends Level {
             return { x: rm.worldX + 64, y: rm.worldY + 224 };
         }
         return { x: rm.worldX + 64, y: rm.worldY + 192 };
+    }
+
+    /**
+     * Resets all circuit nodes, logic gates, lightboxes, and doors in the specified room back to their initial state.
+     * Ensures selected levels from the menu start completely unsolved.
+     * @param {number} roomIndex 
+     */
+    resetRoomCircuits(roomIndex) {
+        if (!this.rooms || roomIndex < 0 || roomIndex >= this.rooms.length) {
+            this.resetAllCircuits();
+            return;
+        }
+        const rm = this.rooms[roomIndex];
+        const minX = rm.worldX;
+        const maxX = rm.worldX + rm.pxWid;
+        const minY = rm.worldY;
+        const maxY = rm.worldY + rm.pxHei;
+
+        if (this.circuitSystem && typeof this.circuitSystem.resetRoomNodes === 'function') {
+            this.circuitSystem.resetRoomNodes(minX, maxX, minY, maxY);
+        }
+
+        // Reset doors in this room
+        for (const d of (this.doors || [])) {
+            if (d.x >= minX && d.x < maxX && d.y >= minY && d.y < maxY) {
+                d.isOpen = false;
+                d.openProgress = 0;
+            }
+        }
+
+        // Reset hazards in this room
+        for (const h of (this.colliders || [])) {
+            if (h.isHazard && h.x >= minX && h.x < maxX && h.y >= minY && h.y < maxY) {
+                h.isElectrified = true;
+            }
+        }
+
+        // Reset lightboxes in this room
+        for (const b of (this.lightBoxes || [])) {
+            if (b.x >= minX && b.x < maxX && b.y >= minY && b.y < maxY) {
+                b.isPowered = false;
+            }
+        }
+
+        // Reset logic gates in this room
+        for (const g of (this.logicGates || [])) {
+            if (g.x >= minX && g.x < maxX && g.y >= minY && g.y < maxY) {
+                g.isPowered = false;
+                g.isConflict = false;
+            }
+        }
+    }
+
+    /**
+     * Resets all circuit nodes, logic gates, lightboxes, and doors across the entire facility.
+     */
+    resetAllCircuits() {
+        if (this.circuitSystem && typeof this.circuitSystem.resetAllNodes === 'function') {
+            this.circuitSystem.resetAllNodes();
+        }
+
+        for (const d of (this.doors || [])) {
+            d.isOpen = false;
+            d.openProgress = 0;
+        }
+
+        for (const h of (this.colliders || [])) {
+            if (h.isHazard) {
+                h.isElectrified = true;
+            }
+        }
+
+        for (const b of (this.lightBoxes || [])) {
+            b.isPowered = false;
+        }
+
+        for (const g of (this.logicGates || [])) {
+            g.isPowered = false;
+            g.isConflict = false;
+        }
     }
 
     update(dt, player, input = null) {

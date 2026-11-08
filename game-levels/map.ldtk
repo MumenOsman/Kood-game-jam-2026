@@ -8981,9 +8981,9 @@
 							"defUid": 20,
 							"px": [464,48],
 							"fieldInstances": [
-								{ "__identifier": "Socket_Dial", "__type": "LocalEnum.Socket_Dial", "__value": "T_SHAPE", "__tile": null, "defUid": 25, "realEditorValues": [{
+								{ "__identifier": "Socket_Dial", "__type": "LocalEnum.Socket_Dial", "__value": "CROSS", "__tile": null, "defUid": 25, "realEditorValues": [{
 									"id": "V_String",
-									"params": ["T_SHAPE"]
+									"params": ["CROSS"]
 								}] },
 								{ "__identifier": "initialRotation", "__type": "Int", "__value": 0, "__tile": null, "defUid": 26, "realEditorValues": [] },
 								{ "__identifier": "targetDevice", "__type": "String", "__value": null, "__tile": null, "defUid": 27, "realEditorValues": [] }

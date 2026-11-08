@@ -94,9 +94,11 @@ export class CircuitSystem {
             x: nodeConfig.x,
             y: nodeConfig.y,
             ports: ports,
+            initialPorts: [...ports],
             isRotatable: nodeConfig.isRotatable !== false,
             rotationAngle: nodeConfig.rotationAngle || 0,
             targetRotationAngle: nodeConfig.rotationAngle || 0,
+            initialRotationAngle: nodeConfig.rotationAngle || 0,
             isPowered: false,
             wasPowered: false,
             deviceId: nodeConfig.deviceId || null,
@@ -156,6 +158,7 @@ export class CircuitSystem {
                 let closest = null;
                 let minDist = 42;
                 for (const node of this.nodes.values()) {
+                    if (!node.isRotatable) continue;
                     const dist = Math.hypot(node.x - px, node.y - py);
                     if (dist < minDist) {
                         minDist = dist;
@@ -205,6 +208,38 @@ export class CircuitSystem {
             nodeId: node.id,
             ports: [...node.ports]
         });
+    }
+
+    /**
+     * Resets all nodes within a room's bounding box back to their initial ports and rotation angles.
+     */
+    resetRoomNodes(minX, maxX, minY, maxY) {
+        for (const node of this.nodes.values()) {
+            if (node.x >= minX && node.x < maxX && node.y >= minY && node.y < maxY) {
+                if (node.initialPorts) {
+                    node.ports = [...node.initialPorts];
+                }
+                node.rotationAngle = node.initialRotationAngle || 0;
+                node.targetRotationAngle = node.initialRotationAngle || 0;
+            }
+        }
+        this.recalculatePower();
+        this.eventBus.emit('CIRCUIT_UPDATED', { reset: true });
+    }
+
+    /**
+     * Resets all circuit nodes in the facility back to their initial ports and rotation angles.
+     */
+    resetAllNodes() {
+        for (const node of this.nodes.values()) {
+            if (node.initialPorts) {
+                node.ports = [...node.initialPorts];
+            }
+            node.rotationAngle = node.initialRotationAngle || 0;
+            node.targetRotationAngle = node.initialRotationAngle || 0;
+        }
+        this.recalculatePower();
+        this.eventBus.emit('CIRCUIT_UPDATED', { reset: true });
     }
 
     /**
@@ -412,6 +447,7 @@ export class CircuitSystem {
     }
 
     _renderCenterSocket(ctx, node) {
+        if (!node.isRotatable) return;
         const isPlugged = (this.player &&
                            this.player.isTethered &&
                            this.player.tetherSocket &&
