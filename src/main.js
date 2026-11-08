@@ -331,7 +331,7 @@ async function bootstrap() {
     const creditFlightScene = new CreditFlightScene({
         assetLoader,
         audioManager,
-        uiTheme: uiManager.uiTheme,
+        uiTheme: uiManager.theme,
         eventBus,
         onComplete: () => {
             isGameCompleted = true;
@@ -433,11 +433,12 @@ async function bootstrap() {
 
                     // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
                     camera.follow(player);
-                    camera.update();
 
                     // HUD
                     hud.update(dt);
                 }
+
+                camera.update();
             } else {
                 // In menus / pause: keep ambient entity visuals animated (drones hovering & thrusters, blast doors)
                 // while kinematics, physics, timers, wire, and hazard shocks remain 100% frozen

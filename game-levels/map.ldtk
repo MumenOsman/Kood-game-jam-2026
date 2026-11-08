@@ -9915,7 +9915,24 @@
 					"seed": 4175629,
 					"overrideTilesetUid": null,
 					"gridTiles": [],
-					"entityInstances": []
+					"entityInstances": [
+						{
+							"__identifier": "Wall_run",
+							"__grid": [5,4],
+							"__pivot": [0,0],
+							"__tags": ["geometry"],
+							"__tile": null,
+							"__smartColor": "#00E5FF",
+							"iid": "32dcf650-bde0-11f1-a2c7-614d024d00cf",
+							"width": 32,
+							"height": 64,
+							"defUid": 65,
+							"px": [160,128],
+							"fieldInstances": [{ "__identifier": "Face", "__type": "LocalEnum.Face", "__value": "BOTH", "__tile": null, "defUid": 67, "realEditorValues": [] }],
+							"__worldX": 7200,
+							"__worldY": -192
+						}
+					]
 				},
 				{
 					"__identifier": "Pipes",

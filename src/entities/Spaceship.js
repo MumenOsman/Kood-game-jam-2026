@@ -126,3 +126,4 @@ export class Spaceship {
         ctx.restore();
     }
 }
+

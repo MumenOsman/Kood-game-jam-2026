@@ -174,35 +174,39 @@ export class AudioManager {
 
     playMusic(key, restart = false) {
         if (!this.musicSources[key]) return;
-        if (this.currentMusicKey === key && this.currentMusicAudio && !restart) {
-            if (this.currentMusicAudio.paused && this.isUnlocked) {
-                this.currentMusicAudio.play().catch(() => {});
+        try {
+            if (this.currentMusicKey === key && this.currentMusicAudio && !restart) {
+                if (this.currentMusicAudio.paused && this.isUnlocked) {
+                    this.currentMusicAudio.play().catch(() => {});
+                }
+                return;
             }
-            return;
-        }
 
-        // Fade out or pause existing
-        if (this.currentMusicAudio) {
-            this.currentMusicAudio.onended = null;
-            this.currentMusicAudio.pause();
-            this.currentMusicAudio.currentTime = 0;
-        }
+            // Fade out or pause existing
+            if (this.currentMusicAudio) {
+                this.currentMusicAudio.onended = null;
+                this.currentMusicAudio.pause();
+                this.currentMusicAudio.currentTime = 0;
+            }
 
-        this.currentMusicKey = key;
-        const audio = new Audio(this.musicSources[key]);
-        audio.loop = true;
-        // Guaranteed seamless loop fallback across all browsers
-        audio.onended = () => {
-            audio.currentTime = 0;
-            audio.play().catch(() => {});
-        };
-        audio.volume = this.getEffectiveMusicVolume();
-        this.currentMusicAudio = audio;
+            this.currentMusicKey = key;
+            const audio = new Audio(this.musicSources[key]);
+            audio.loop = true;
+            // Guaranteed seamless loop fallback across all browsers
+            audio.onended = () => {
+                audio.currentTime = 0;
+                audio.play().catch(() => {});
+            };
+            audio.volume = this.getEffectiveMusicVolume();
+            this.currentMusicAudio = audio;
 
-        if (this.isUnlocked) {
-            audio.play().catch(err => {
-                console.warn('[AudioManager] Music play blocked, waiting for interaction:', err);
-            });
+            if (this.isUnlocked) {
+                audio.play().catch(err => {
+                    console.warn('[AudioManager] Music play blocked, waiting for interaction:', err);
+                });
+            }
+        } catch (err) {
+            console.warn(`[AudioManager] Error playing music (${key}):`, err);
         }
     }
 

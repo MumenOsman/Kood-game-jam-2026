@@ -106,9 +106,13 @@ export class CreditFlightScene {
         this.vy = 0;
 
         // Switch to special level music
-        if (this.audio) {
-            this.audio.playMusic('special_level', true);
-            this.audio.playFx('start_game', 0.9);
+        try {
+            if (this.audio) {
+                this.audio.playMusic('special_level', true);
+                this.audio.playFx('start_game', 0.9);
+            }
+        } catch (e) {
+            console.warn('[CreditFlightScene] Audio start error:', e);
         }
     }
 
@@ -165,10 +169,15 @@ export class CreditFlightScene {
         let moveX = 0;
         let moveY = 0;
         if (input) {
-            if (input.keys['KeyD'] || input.keys['ArrowRight']) moveX += 1;
-            if (input.keys['KeyA'] || input.keys['ArrowLeft']) moveX -= 0.6; // slower reverse
-            if (input.keys['KeyW'] || input.keys['ArrowUp']) moveY -= 1;
-            if (input.keys['KeyS'] || input.keys['ArrowDown']) moveY += 1;
+            const isRight = input.isKeyDown ? (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) : false;
+            const isLeft = input.isKeyDown ? (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) : false;
+            const isUp = input.isKeyDown ? (input.isKeyDown('KeyW') || input.isKeyDown('ArrowUp')) : false;
+            const isDown = input.isKeyDown ? (input.isKeyDown('KeyS') || input.isKeyDown('ArrowDown')) : false;
+
+            if (isRight) moveX += 1;
+            if (isLeft) moveX -= 0.6; // slower reverse
+            if (isUp) moveY -= 1;
+            if (isDown) moveY += 1;
         }
 
         // Idle forward drift
@@ -235,10 +244,15 @@ export class CreditFlightScene {
         let inputY = 0;
 
         if (input) {
-            if (input.keys['KeyD'] || input.keys['ArrowRight']) inputX += 1;
-            if (input.keys['KeyA'] || input.keys['ArrowLeft']) inputX -= 1;
-            if (input.keys['KeyW'] || input.keys['ArrowUp']) inputY -= 1;
-            if (input.keys['KeyS'] || input.keys['ArrowDown']) inputY += 1;
+            const isRight = input.isKeyDown ? (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) : false;
+            const isLeft = input.isKeyDown ? (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) : false;
+            const isUp = input.isKeyDown ? (input.isKeyDown('KeyW') || input.isKeyDown('ArrowUp')) : false;
+            const isDown = input.isKeyDown ? (input.isKeyDown('KeyS') || input.isKeyDown('ArrowDown')) : false;
+
+            if (isRight) inputX += 1;
+            if (isLeft) inputX -= 1;
+            if (isUp) inputY -= 1;
+            if (isDown) inputY += 1;
         }
 
         this.vx += (inputX * speed - this.vx) * Math.min(1, dt * 5);
@@ -400,9 +414,12 @@ export class CreditFlightScene {
         ctx.save();
         ctx.imageSmoothingEnabled = false;
 
-        // Animated flight frame
+        // Animated flight frame with static fallback
         const frameKeys = ['vehicle_f1', 'vehicle_f2', 'vehicle_f3'];
-        const shipImg = this.assetLoader ? this.assetLoader.getImage(frameKeys[this.frameIndex]) : null;
+        let shipImg = this.assetLoader ? this.assetLoader.getImage(frameKeys[this.frameIndex]) : null;
+        if (!shipImg || !shipImg.complete) {
+            shipImg = this.assetLoader ? this.assetLoader.getImage('vehicle_static') : null;
+        }
 
         if (shipImg && shipImg.complete) {
             ctx.drawImage(shipImg, drawX, drawY, this.width, this.height);
@@ -470,9 +487,12 @@ export class CreditFlightScene {
 
         ctx.imageSmoothingEnabled = false;
 
-        // Vehicle frame
+        // Vehicle frame with static fallback
         const frameKeys = ['vehicle_f1', 'vehicle_f2', 'vehicle_f3'];
-        const shipImg = this.assetLoader ? this.assetLoader.getImage(frameKeys[this.frameIndex]) : null;
+        let shipImg = this.assetLoader ? this.assetLoader.getImage(frameKeys[this.frameIndex]) : null;
+        if (!shipImg || !shipImg.complete) {
+            shipImg = this.assetLoader ? this.assetLoader.getImage('vehicle_static') : null;
+        }
         if (shipImg && shipImg.complete) {
             ctx.drawImage(shipImg, -this.width / 2, -this.height / 2, this.width, this.height);
         }
@@ -558,3 +578,4 @@ export class CreditFlightScene {
         ctx.restore();
     }
 }
+

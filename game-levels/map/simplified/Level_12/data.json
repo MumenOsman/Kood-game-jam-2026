@@ -32,6 +32,21 @@
 				"customFields" : {}
 			}
 		],
+		"Wall_run": [
+			{
+				"id": "Wall_run",
+				"iid": "32dcf650-bde0-11f1-a2c7-614d024d00cf",
+				"layer": "Wall_run",
+				"x": 160,
+				"y": 128,
+				"width": 32,
+				"height": 64,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			}
+		],
 		"Drone": [
 			{
 				"id": "Drone",

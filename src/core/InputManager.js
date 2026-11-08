@@ -256,4 +256,13 @@ export class InputManager {
     get interactPressed() {
         return this.isActionPressed('interact');
     }
+
+    /**
+     * Map-like access proxy for keys: e.g. input.keys['KeyD'] -> input.isKeyDown('KeyD')
+     */
+    get keys() {
+        return new Proxy(this, {
+            get: (target, prop) => (typeof prop === 'string' ? target.isKeyDown(prop) : false)
+        });
+    }
 }
