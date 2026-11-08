@@ -1,7 +1,7 @@
 {
 	"identifier": "And_gate_2",
 	"uniqueIdentifer": "e5d15090-bde0-11f1-a2c7-6f2fb509c826",
-	"x": 2560,
+	"x": 3840,
 	"y": 0,
 	"width": 640,
 	"height": 320,
@@ -12,12 +12,8 @@
 			"dir": "w"
 		},
 		{
-			"levelIid": "2a007760-bde0-11f1-a2c7-d5c337fda986",
+			"levelIid": "d19aa9e0-bde0-11f1-a2c7-cb52af5c89c1",
 			"dir": "e"
-		},
-		{
-			"levelIid": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
-			"dir": "ne"
 		}
 	],
 	"customFields" : {},
@@ -153,7 +149,7 @@
 				"iid": "fd75e0e0-bde0-11f1-a2c7-4915fe9eadf2",
 				"layer": "Socket_dials",
 				"x": 320,
-				"y": 224,
+				"y": 192,
 				"width": 160,
 				"height": 32,
 				"color": 16717636,
@@ -183,28 +179,14 @@
 				"id": "Drone",
 				"iid": "964a2730-bde0-11f1-a2c7-5528c7e20683",
 				"layer": "Socket_dials",
-				"x": 112,
+				"x": 400,
 				"y": 112,
 				"width": 32,
 				"height": 32,
 				"color": 1199753,
 				"customFields": {
 					"Drone_Type": "Tutorial_Drone",
-					"Context": "And gate"
-				}
-			},
-			{
-				"id": "Drone",
-				"iid": "f8abda40-bde0-11f1-a2c7-c318e477dc33",
-				"layer": "Socket_dials",
-				"x": 368,
-				"y": 112,
-				"width": 32,
-				"height": 32,
-				"color": 1199753,
-				"customFields": {
-					"Drone_Type": "Tutorial_Drone",
-					"Context": "electrified laser"
+					"Context": "Laser info"
 				}
 			}
 		]

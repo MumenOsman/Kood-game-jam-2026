@@ -1,16 +1,12 @@
 {
 	"identifier": "And_gate_3",
 	"uniqueIdentifer": "2a007760-bde0-11f1-a2c7-d5c337fda986",
-	"x": 3200,
+	"x": 5120,
 	"y": 0,
 	"width": 640,
 	"height": 320,
 	"bgColor": "#696A79",
 	"neighbourLevels": [
-		{
-			"levelIid": "e5d15090-bde0-11f1-a2c7-6f2fb509c826",
-			"dir": "w"
-		},
 		{
 			"levelIid": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
 			"dir": "n"
@@ -18,6 +14,10 @@
 		{
 			"levelIid": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
 			"dir": "ne"
+		},
+		{
+			"levelIid": "d19aa9e0-bde0-11f1-a2c7-cb52af5c89c1",
+			"dir": "w"
 		}
 	],
 	"customFields" : {},
@@ -79,6 +79,19 @@
 				"customFields": {
 					"Face": "BOTH"
 				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "31053d00-bde0-11f1-a2c7-c128499a9f12",
+				"layer": "Wall_run",
+				"x": 416,
+				"y": 96,
+				"width": 32,
+				"height": 96,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
 			}
 		],
 		"Socket_Dial": [
@@ -108,7 +121,7 @@
 				"color": 14120515,
 				"customFields": {
 					"Socket_Dial": "T_SHAPE",
-					"initialRotation": 0,
+					"initialRotation": 1,
 					"targetDevice": null
 				}
 			},

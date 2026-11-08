@@ -1,16 +1,12 @@
 {
 	"identifier": "And_gate_3_above",
 	"uniqueIdentifer": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
-	"x": 3200,
+	"x": 5120,
 	"y": -320,
 	"width": 640,
 	"height": 320,
 	"bgColor": "#696A79",
 	"neighbourLevels": [
-		{
-			"levelIid": "e5d15090-bde0-11f1-a2c7-6f2fb509c826",
-			"dir": "sw"
-		},
 		{
 			"levelIid": "2a007760-bde0-11f1-a2c7-d5c337fda986",
 			"dir": "s"
@@ -18,6 +14,10 @@
 		{
 			"levelIid": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
 			"dir": "e"
+		},
+		{
+			"levelIid": "d19aa9e0-bde0-11f1-a2c7-cb52af5c89c1",
+			"dir": "sw"
 		}
 	],
 	"customFields" : {},
@@ -203,7 +203,7 @@
 				"color": 14120515,
 				"customFields": {
 					"Socket_Dial": "CORNER",
-					"initialRotation": 0,
+					"initialRotation": 1,
 					"targetDevice": null
 				}
 			},
@@ -217,7 +217,7 @@
 				"height": 32,
 				"color": 14120515,
 				"customFields": {
-					"Socket_Dial": "CROSS",
+					"Socket_Dial": "T_SHAPE",
 					"initialRotation": 0,
 					"targetDevice": null
 				}
@@ -361,21 +361,20 @@
 				}
 			}
 		],
-		"Drone": [
+		"Socket_Battery": [
 			{
-				"id": "Drone",
-				"iid": "11a289e0-bde0-11f1-a2c7-c92591df3d69",
+				"id": "Socket_Battery",
+				"iid": "38d6cf30-bde0-11f1-a2c7-c14d125b3983",
 				"layer": "Socket_dials",
-				"x": 176,
-				"y": 272,
+				"x": 208,
+				"y": 144,
 				"width": 32,
 				"height": 32,
-				"color": 1199753,
-				"customFields": {
-					"Drone_Type": "Tutorial_Drone",
-					"Context": "XOR gate"
-				}
-			},
+				"color": 15389866,
+				"customFields" : {}
+			}
+		],
+		"Drone": [
 			{
 				"id": "Drone",
 				"iid": "b7835730-bde0-11f1-a2c7-0d0e7d7aa965",
@@ -389,19 +388,6 @@
 					"Drone_Type": "Heavy_Drone",
 					"Context": "Hint that a player can use the circuits to hang and move"
 				}
-			}
-		],
-		"Socket_Battery": [
-			{
-				"id": "Socket_Battery",
-				"iid": "38d6cf30-bde0-11f1-a2c7-c14d125b3983",
-				"layer": "Socket_dials",
-				"x": 208,
-				"y": 144,
-				"width": 32,
-				"height": 32,
-				"color": 15389866,
-				"customFields" : {}
 			}
 		]
 	}

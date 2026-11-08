@@ -1,0 +1,156 @@
+{
+	"identifier": "Tutorial_XOR_gate",
+	"uniqueIdentifer": "d19aa9e0-bde0-11f1-a2c7-cb52af5c89c1",
+	"x": 4480,
+	"y": 0,
+	"width": 640,
+	"height": 320,
+	"bgColor": "#696A79",
+	"neighbourLevels": [
+		{
+			"levelIid": "e5d15090-bde0-11f1-a2c7-6f2fb509c826",
+			"dir": "w"
+		},
+		{
+			"levelIid": "2a007760-bde0-11f1-a2c7-d5c337fda986",
+			"dir": "e"
+		},
+		{
+			"levelIid": "296441f0-bde0-11f1-a2c7-df2af7d93ffd",
+			"dir": "ne"
+		}
+	],
+	"customFields" : {},
+	"layers": [
+		"Factory2.png",
+		"Test_layer.png",
+		"Pipes.png"
+	],
+	"entities": {
+		"Drone": [
+			{
+				"id": "Drone",
+				"iid": "d19aa9e4-bde0-11f1-a2c7-5fafbc79f2a6",
+				"layer": "Socket_dials",
+				"x": 368,
+				"y": 176,
+				"width": 32,
+				"height": 32,
+				"color": 1199753,
+				"customFields": {
+					"Drone_Type": "Tutorial_Drone",
+					"Context": "XOR gate tutorial"
+				}
+			}
+		],
+		"Socket_Dial": [
+			{
+				"id": "Socket_Dial",
+				"iid": "d19aa9e5-bde0-11f1-a2c7-63571f427c48",
+				"layer": "Socket_dials",
+				"x": 48,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "Source",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "d19aa9e7-bde0-11f1-a2c7-7565d4a18846",
+				"layer": "Socket_dials",
+				"x": 560,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "CORNER",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			},
+			{
+				"id": "Socket_Dial",
+				"iid": "d19aa9e8-bde0-11f1-a2c7-b9de5aa085aa",
+				"layer": "Socket_dials",
+				"x": 496,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 14120515,
+				"customFields": {
+					"Socket_Dial": "T_SHAPE",
+					"initialRotation": 0,
+					"targetDevice": null
+				}
+			}
+		],
+		"Logic_Gate": [
+			{
+				"id": "Logic_Gate",
+				"iid": "d19aa9e6-bde0-11f1-a2c7-e50e4f54caa8",
+				"layer": "Socket_dials",
+				"x": 560,
+				"y": 80,
+				"width": 32,
+				"height": 32,
+				"color": 39387,
+				"customFields": {
+					"GateType": "XOR",
+					"orientation": 0
+				}
+			}
+		],
+		"Light_Box": [
+			{
+				"id": "Light_Box",
+				"iid": "d19aa9e9-bde0-11f1-a2c7-992ab9f7d399",
+				"layer": "Socket_dials",
+				"x": 624,
+				"y": 144,
+				"width": 32,
+				"height": 32,
+				"color": 16711680,
+				"customFields": {
+					"Color": "#FF0000"
+				}
+			}
+		],
+		"Hazard_Electric": [
+			{
+				"id": "Hazard_Electric",
+				"iid": "d19aa9ea-bde0-11f1-a2c7-73efd5faef7d",
+				"layer": "Socket_dials",
+				"x": 608,
+				"y": 160,
+				"width": 32,
+				"height": 64,
+				"color": 16717636,
+				"customFields": {
+					"deviceId": null,
+					"Face": "BOTH",
+					"isWallRunnable": false,
+					"shockDamage": 8
+				}
+			}
+		],
+		"Socket_Battery": [
+			{
+				"id": "Socket_Battery",
+				"iid": "d19aa9eb-bde0-11f1-a2c7-0d2f2855cbc7",
+				"layer": "Socket_dials",
+				"x": 272,
+				"y": 208,
+				"width": 32,
+				"height": 32,
+				"color": 15389866,
+				"customFields" : {}
+			}
+		]
+	}
+}

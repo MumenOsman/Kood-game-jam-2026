@@ -94,7 +94,16 @@ export class LDtkLevel extends Level {
             // 2. Load background image & room tile layers for all rooms
             this.backgroundImage = await this._loadRoomImage(this.bgPath);
 
-            const levels = data.levels || [];
+            const rawLevels = data.levels || [];
+            // Sort rooms in logical spatial progression order (worldX ascending, then bottom-to-top worldY descending)
+            const levels = [...rawLevels].sort((a, b) => {
+                const ax = a.worldX !== undefined ? a.worldX : 0;
+                const bx = b.worldX !== undefined ? b.worldX : 0;
+                if (ax !== bx) return ax - bx;
+                const ay = a.worldY !== undefined ? a.worldY : 0;
+                const by = b.worldY !== undefined ? b.worldY : 0;
+                return by - ay; // Bottom to top for ascending shafts
+            });
             this.totalRooms = Math.max(1, levels.length);
             this.width = this.roomWidth * this.totalRooms;
             this.rooms = levels.map((lvl, index) => ({
@@ -289,6 +298,7 @@ export class LDtkLevel extends Level {
                     }));
                 } else if (id === 'Socket_Dial') {
                     const design = fields.Socket_Dial || 'T_SHAPE';
+                    const isSource = (design.toLowerCase() === 'source');
                     let rot = fields.initialRotation || 0;
                     // In And_gate_3, the 1-click bottom circuit dial starts horizontal (90 deg) so laser is active until clicked
                     if (lvl.identifier === 'And_gate_3' && Math.round(ent.px[0]) === 624 && Math.round(ent.px[1]) === 208 && rot === 0) {
@@ -296,6 +306,17 @@ export class LDtkLevel extends Level {
                     }
                     const steps = Math.round(rot >= 90 ? rot / 90 : rot) % 4;
                     const initialAngle = steps * (Math.PI / 2);
+
+                    if (isSource) {
+                        this.powerSources.push({
+                            id: `source_${Math.round(topLeftX)}_${Math.round(topLeftY)}`,
+                            x: topLeftX,
+                            y: topLeftY,
+                            width: w,
+                            height: h
+                        });
+                    }
+
                     const sock = new Socket(`dial_sock_${centerX}_${centerY}`, centerX, centerY, 'CIRCUIT', {
                         label: design,
                         assetLoader: this.assetLoader
@@ -310,6 +331,7 @@ export class LDtkLevel extends Level {
                             id: `dial_node_${centerX}_${centerY}`,
                             x: centerX,
                             y: centerY,
+                            type: isSource ? 'SOURCE' : 'JUNCTION',
                             design: design,
                             ports: this._getInitialPorts(design, rot),
                             rotationAngle: initialAngle,
@@ -454,7 +476,7 @@ export class LDtkLevel extends Level {
         let base = [false, true, true, true];   // T_SHAPE: Right, Bottom, Left (T pointing DOWN)
         if (design === 'CORNER') base = [false, true, true, false];  // CORNER: Right, Bottom
         if (design === 'STRAIGHT') base = [true, false, true, false]; // STRAIGHT: Top, Bottom
-        if (design === 'CROSS') base = [true, true, true, true];     // CROSS: 4-way
+        if (design === 'CROSS' || (design && design.toLowerCase() === 'source')) base = [true, true, true, true]; // CROSS or Source: 4-way
 
         const steps = Math.round(rot >= 90 ? rot / 90 : rot) % 4;
         for (let i = 0; i < steps; i++) {
@@ -469,7 +491,7 @@ export class LDtkLevel extends Level {
             if (ctxKey.includes('hang') || ctxKey.includes('circuits')) {
                 return '[LMB] = Wire To Circuit Dials\nHang and swing!';
             }
-            if (ctxKey.includes('xor') || ctxKey.includes('or gate') || ctxKey.includes('or')) {
+            if (ctxKey.includes('xor') || ctxKey.includes('or gate')) {
                 return 'XOR GATE:\nActive on 1 input\nConflict on 2 inputs';
             }
             if (ctxKey.includes('and gate')) {
@@ -478,14 +500,14 @@ export class LDtkLevel extends Level {
             if (ctxKey.includes('laser') || ctxKey.includes('electrified')) {
                 return 'HAZARD WARNING:\nSever circuit to cut laser';
             }
-            if (ctxKey.includes('door') || ctxKey.includes('puzzle') || ctxKey.includes('rotation')) {
+            if (ctxKey.includes('turning') || ctxKey.includes('socket') || ctxKey.includes('dial') || ctxKey.includes('door') || ctxKey.includes('puzzle') || ctxKey.includes('rotation')) {
                 return '[LMB] = Connect Wire\n[E] = Rotate Junction\nSolve puzzle to open door';
             }
             if (ctxKey.includes('charging')) {
                 return '[LMB] = Connect Wire to Charger\nAuto-Recharges Battery';
             }
             if (ctxKey.includes('wall run')) {
-                return '[W] = Wall Run\n[SPACE] = Wall Jump';
+                return 'Sprint into wall to run up\n[SPACE] = Wall Jump';
             }
             if (ctxKey.includes('swing') || ctxKey.includes('connect wire')) {
                 return '[LMB] = Shoot Wire\n[RMB] = Cut Wire\n[SPACE] = Swing Jump';
@@ -1365,50 +1387,63 @@ export class LDtkLevel extends Level {
         if (!this.colliders || !this.lightBoxes) return;
         const hazards = this.colliders.filter(c => c.isHazard);
         for (const haz of hazards) {
-            // Room 4: And_gate_2 (worldX: 2560..3200, worldY: 0)
-            if (haz.x >= 2560 && haz.x < 3200) {
-                haz.cutoffBoxId = 'lightbox_3040_256';
-            }
-            // Room 5: And_gate_3 (worldX: 3200..3840, worldY: 0..320)
-            else if (haz.x >= 3200 && haz.x < 3840 && haz.y >= 0) {
-                if (haz.x === 3424) {
-                    // Wall laser on left wall
-                    haz.cutoffBoxId = 'lightbox_3392_128';
-                } else if (haz.x === 3712 && haz.y === 160) {
-                    // Lower laser in wall-run shaft
-                    haz.cutoffBoxId = 'lightbox_3680_160';
-                    haz.isCorridorBeam = true;
-                } else if (haz.x === 3712 && haz.y === 32) {
-                    // Upper laser in wall-run shaft
-                    haz.cutoffBoxId = 'lightbox_3776_32';
-                    haz.isCorridorBeam = true;
-                }
-            }
-            // Room 6: And_gate_3_above (worldX: 3200..3840, worldY: -320..0)
-            else if (haz.x >= 3200 && haz.x < 3840 && haz.y < 0) {
-                if (haz.x === 3232) {
-                    // Lower hazard
-                    haz.cutoffBoxId = 'lightbox_3296_-96';
-                    haz.isCorridorBeam = true;
-                } else if (haz.x === 3488) {
-                    // Upper walkway laser: spans all the way across to below the blast door
-                    haz.cutoffBoxId = 'lightbox_3776_-256';
-                }
-            }
-            // Room 7: Level_7 (worldX: 3840..4480, worldY: -320..0)
-            else if (haz.x >= 3840 && haz.y < 0) {
-                haz.cutoffBoxId = 'lightbox_4448_-128';
-                haz.isCorridorBeam = true;
-            }
+            // Find the room containing this hazard
+            const room = (this.rooms || []).find(r =>
+                haz.x >= r.worldX && haz.x < r.worldX + r.pxWid &&
+                haz.y >= r.worldY && haz.y < r.worldY + r.pxHei
+            );
+            if (!room) continue;
 
-            // Fallback: match single lightbox in same room sector if not specifically mapped
-            if (!haz.cutoffBoxId && this.lightBoxes.length > 0) {
-                const roomBoxes = this.lightBoxes.filter(b => 
-                    Math.abs(b.x - haz.x) < 640 &&
-                    ((haz.y < 0 && b.y < 0) || (haz.y >= 0 && b.y >= 0))
-                );
-                if (roomBoxes.length === 1) {
-                    haz.cutoffBoxId = roomBoxes[0].id;
+            const roomBoxes = this.lightBoxes.filter(b =>
+                b.x >= room.worldX && b.x < room.worldX + room.pxWid &&
+                b.y >= room.worldY && b.y < room.worldY + room.pxHei
+            );
+
+            if (roomBoxes.length === 1) {
+                haz.cutoffBoxId = roomBoxes[0].id;
+                haz.isCorridorBeam = true;
+            } else if (roomBoxes.length > 1) {
+                // Multi-box rooms (e.g. And_gate_3 / And_gate_3_above)
+                const rx = haz.x - room.worldX;
+                const ry = haz.y - room.worldY;
+                if (room.id === 'And_gate_3') {
+                    if (rx === 224 && ry === 32) {
+                        // Wall laser on left wall -> lightbox at [208, 144]
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 208 && (bx.y - room.worldY) === 144);
+                        if (b) haz.cutoffBoxId = b.id;
+                    } else if (rx === 512 && ry === 160) {
+                        // Lower laser in shaft -> lightbox at [496, 176]
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 496 && (bx.y - room.worldY) === 176);
+                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
+                    } else if (rx === 512 && ry === 32) {
+                        // Upper laser in shaft -> lightbox at [592, 48]
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 592 && (bx.y - room.worldY) === 48);
+                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
+                    }
+                } else if (room.id === 'And_gate_3_above') {
+                    if (rx === 32 && ry === 224) {
+                        // Lower hazard -> lightbox at [112, 240]
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 112 && (bx.y - room.worldY) === 240);
+                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
+                    } else if (rx === 288 && ry === 192) {
+                        // Upper walkway laser -> door lightbox at [592, 80]
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 592 && (bx.y - room.worldY) === 80);
+                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
+                    }
+                }
+
+                // If still not matched, pick closest lightbox in room
+                if (!haz.cutoffBoxId) {
+                    let closest = null;
+                    let minDist = Infinity;
+                    for (const b of roomBoxes) {
+                        const dist = Math.hypot(b.x - haz.x, b.y - haz.y);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closest = b;
+                        }
+                    }
+                    if (closest) haz.cutoffBoxId = closest.id;
                 }
             }
         }
@@ -1417,15 +1452,27 @@ export class LDtkLevel extends Level {
     _resolveDoorControls() {
         if (!this.doors || !this.lightBoxes) return;
         for (const d of this.doors) {
-            if (d.x === 2176 && d.y === 128) {
-                d.controlBoxId = 'lightbox_2176_96';
-            } else if (d.x === 3776 && d.y === -224) {
-                d.controlBoxId = 'lightbox_3776_-256';
+            // Find closest lightbox within 128px (typically placed adjacent at dx: +16, dy: -16)
+            let closest = null;
+            let minDist = Infinity;
+            for (const b of this.lightBoxes) {
+                const dist = Math.hypot(b.x - d.x, b.y - d.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closest = b;
+                }
+            }
+            if (closest && minDist <= 128) {
+                d.controlBoxId = closest.id;
             }
         }
     }
 
     _deduceGatePorts(relGx, relGy, gateType) {
+        // Tutorial_And_gate & Tutorial_XOR_gate: gate at rel [17, 2] or [18, 2] -> Inputs: Left, Bottom. Output: Right.
+        if ((relGx === 17 || relGx === 18) && (relGy === 2 || relGy === 3)) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
         // Room 3 (And_gate): gate at rel [5, 1] -> Inputs: Left, Bottom. Output: Right.
         if (relGx === 5 && relGy === 1) {
             return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
