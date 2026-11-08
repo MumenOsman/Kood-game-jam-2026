@@ -385,11 +385,6 @@ export class CreditFlightScene {
             }
         }
     }
-            if (typeof this.onComplete === 'function') {
-                this.onComplete();
-            }
-        }
-    }
 
     render(ctx, camera = null) {
         if (this.state === FLIGHT_STATE.INACTIVE || this.state === FLIGHT_STATE.COMPLETED) {
@@ -564,9 +559,6 @@ export class CreditFlightScene {
         // Foreground text (golden for titles, crisp white for body)
         ctx.fillStyle = obs.isTitle ? '#f4b03c' : '#ffffff';
         ctx.fillText(obs.text, textX, textY);
-
-        ctx.restore();
-    }
 
         ctx.restore();
     }
