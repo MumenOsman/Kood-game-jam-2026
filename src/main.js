@@ -9,19 +9,19 @@ import { InputManager } from './core/InputManager.js?v=20261107_v18';
 import { Camera } from './core/Camera.js?v=20261107_v18';
 import { AssetLoader } from './core/AssetLoader.js?v=20261107_v18';
 
-import { Player } from './entities/Player.js?v=20261108_v2';
-import { PlayerMovement } from './modules/PlayerMovement.js?v=20261108_v2';
-import { WireSystem } from './modules/WireSystem.js?v=20261108_v2';
-import { CircuitSystem } from './modules/CircuitSystem.js?v=20261108_v2';
-import { PipeSystem } from './modules/PipeSystem.js?v=20261108_v2';
-import { HazardSystem } from './modules/HazardSystem.js?v=20261108_v2';
-import { AnimationController } from './modules/AnimationController.js?v=20261108_v2';
-import { TestRoom } from './levels/TestRoom.js?v=20261108_v2';
-import { LDtkLevel } from './levels/LDtkLevel.js?v=20261108_v2';
-import { HUD } from './ui/HUD.js?v=20261108_v2';
-import { AudioManager } from './core/AudioManager.js?v=20261108_v2';
-import { SaveManager } from './core/SaveManager.js?v=20261108_v2';
-import { UIManager } from './ui/UIManager.js?v=20261108_v2';
+import { Player } from './entities/Player.js?v=20261108_v11';
+import { PlayerMovement } from './modules/PlayerMovement.js?v=20261108_v11';
+import { WireSystem } from './modules/WireSystem.js?v=20261108_v11';
+import { CircuitSystem } from './modules/CircuitSystem.js?v=20261108_v11';
+import { PipeSystem } from './modules/PipeSystem.js?v=20261108_v11';
+import { HazardSystem } from './modules/HazardSystem.js?v=20261108_v11';
+import { AnimationController } from './modules/AnimationController.js?v=20261108_v11';
+import { TestRoom } from './levels/TestRoom.js?v=20261108_v11';
+import { LDtkLevel } from './levels/LDtkLevel.js?v=20261108_v11';
+import { HUD } from './ui/HUD.js?v=20261108_v11';
+import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
+import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
+import { UIManager } from './ui/UIManager.js?v=20261108_v12';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
@@ -312,9 +312,15 @@ async function bootstrap() {
                     respawnPlayer('BATTERY_DEPLETED');
                 }
 
-                // Final Sector Victory Trigger
-                if (activeRoom.id === 'And_gate_3_above' && player.x >= 3792 && player.y < 0) {
-                    uiManager.showVictory();
+                // Final Sector / Game Completion Trigger (dynamic for last room)
+                const rooms = level.rooms || [];
+                const lastRoomIdx = rooms.length > 0 ? rooms.length - 1 : 0;
+                if (rooms.length > 0 && level.activeRoomIndex === lastRoomIdx) {
+                    const lastRoom = rooms[lastRoomIdx];
+                    const exitThresholdX = lastRoom.worldX + lastRoom.pxWid - 48;
+                    if (player.x >= exitThresholdX && player.y >= lastRoom.worldY && player.y <= lastRoom.worldY + lastRoom.pxHei + 20) {
+                        uiManager.showCredits();
+                    }
                 }
 
                 // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
@@ -354,6 +360,8 @@ async function bootstrap() {
         },
         render(ctx, alpha) {
             const isTitleFlow = uiManager.state === 'MAIN_MENU' ||
+                uiManager.state === 'CREDITS' ||
+                uiManager.state === 'VICTORY' ||
                 (uiManager.state === 'OPTIONS' && uiManager.previousState === 'MAIN_MENU');
 
             if (isTitleFlow) {
@@ -392,11 +400,13 @@ async function bootstrap() {
                 ctx.fillStyle = 'rgba(8, 12, 18, 0.78)';
                 ctx.fillRect(0, 0, 1280, 720);
 
-                // Render Title screen or Options overlay (HUD remains hidden until game starts)
+                // Render Title screen or Options overlay (HUD is never shown in menus)
                 uiManager.render(ctx);
             } else {
-                // In-Game Flow (PLAYING, PAUSED, or in-game OPTIONS): HUD is visible
-                hud.render(ctx);
+                // In-Game Flow: only render HUD when actively playing
+                if (uiManager.state === 'PLAYING') {
+                    hud.render(ctx);
+                }
 
                 // UI Overlay (Pause Menu or in-game Options Menu)
                 uiManager.render(ctx);

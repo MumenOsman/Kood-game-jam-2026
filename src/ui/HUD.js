@@ -202,7 +202,7 @@ export class HUD {
             if (p.tetherSocket.type === 'CIRCUIT') {
                 prompt = '[E] Rotate Circuit Junction';
             } else if (p.tetherSocket.type === 'CHARGER') {
-                prompt = p.isCharging ? 'Recharging Battery...' : 'Hold [S] to Recharge';
+                prompt = 'Recharging Battery...  |  [RMB] Disconnect';
             } else if (!p.isGrounded) {
                 prompt = '[Space] Tether Jump  |  [RMB] Cut Wire';
             } else {

@@ -6,7 +6,7 @@
  */
 import { Level } from './Level.js?v=20261107_v8';
 import { Socket } from '../entities/Socket.js?v=20261107_v8';
-import { Drone } from '../entities/Drone.js?v=20261107_v9';
+import { Drone } from '../entities/Drone.js?v=20261108_v4';
 import { PORT, NODE_DESIGNS } from '../modules/CircuitSystem.js?v=20261107_v8';
 
 export class LDtkLevel extends Level {
@@ -108,16 +108,16 @@ export class LDtkLevel extends Level {
 
             this.roomImages = await Promise.all(
                 levels.map(async (lvl, index) => {
-                    const tilesPath = `${this.basePath}${lvl.identifier}/_tiles.png`;
-                    let img = await this._loadRoomImage(tilesPath);
-                    if (img) return img;
-
                     const f2Path = `${this.basePath}${lvl.identifier}/Factory2.png`;
-                    img = await this._loadRoomImage(f2Path);
+                    let img = await this._loadRoomImage(f2Path);
                     if (img) return img;
 
                     const idPath = `${this.basePath}${lvl.identifier}/_composite.png`;
                     img = await this._loadRoomImage(idPath);
+                    if (img) return img;
+
+                    const tilesPath = `${this.basePath}${lvl.identifier}/_tiles.png`;
+                    img = await this._loadRoomImage(tilesPath);
                     if (img) return img;
 
                     return this._loadRoomImage(`${this.basePath}Level_${index}/_composite.png`);
@@ -268,13 +268,14 @@ export class LDtkLevel extends Level {
                 if (id === 'Player_Spawn') {
                     this.spawnPoint = { x: topLeftX, y: topLeftY };
                 } else if (id === 'Drone') {
-                    const droneType = fields.Drone_Type || 'Tutorial_Drone';
-                    const message = this._getDroneMessage(roomIndex, topLeftX, droneType);
+                    const droneType = 'Tutorial_Drone';
+                    const message = this._getDroneMessage(roomIndex, topLeftX, droneType, fields.Context || fields.message);
                     this.drones.push(new Drone(`drone_${topLeftX}_${topLeftY}`, topLeftX, topLeftY, {
-                        type: droneType,
+                        type: 'Tutorial_Drone',
                         message: message,
                         assetLoader: this.assetLoader,
-                        eventBus: this.eventBus
+                        eventBus: this.eventBus,
+                        roomIndex: roomIndex
                     }));
                 } else if (id === 'Socket_Anchor') {
                     this.addSocket(new Socket(`anchor_${centerX}_${centerY}`, centerX, centerY, 'ANCHOR', {
@@ -329,7 +330,7 @@ export class LDtkLevel extends Level {
                 } else if (id === 'Hazard_Electric') {
                     const face = (fields.Face || 'RIGHT').toLowerCase();
                     const hazId = fields.deviceId || `hazard_${Math.round(topLeftX)}_${Math.round(topLeftY)}`;
-                    const isCorridorBeam = (face === 'all_sides' || face === 'all') && w > h && w <= 128;
+                    const isCorridorBeam = (face === 'all_sides' || face === 'all') && ((w > h && w <= 128) || (h > w && h <= 128));
                     this.addHazardObject({
                         x: topLeftX,
                         y: topLeftY,
@@ -377,7 +378,8 @@ export class LDtkLevel extends Level {
                     if (doorId === 'exit_door') this.door = targetDoor;
                     if (doorId === 'matrix_door') this.matrixDoor = targetDoor;
                 } else if (id === 'Logic_Gate') {
-                    const gateType = fields.GateType || 'AND';
+                    const rawGateType = fields.GateType || 'AND';
+                    const gateType = (rawGateType === 'OR') ? 'XOR' : rawGateType;
                     const orientation = fields.orientation || 0;
                     const relGx = Math.round((ent.px[0] - (pivotX * w)) / 32);
                     const relGy = Math.round((ent.px[1] - (pivotY * h)) / 32);
@@ -415,12 +417,30 @@ export class LDtkLevel extends Level {
     }
 
     _buildRoomPipes(lvl, worldX, worldY) {
+        // Collect all dial positions in this room to prevent static pipes from bypassing rotators
+        const dialPositions = new Set();
+        if (this.sockets) {
+            for (const s of this.sockets) {
+                if (s.type === 'CIRCUIT') {
+                    const tlX = Math.round(s.x - 16);
+                    const tlY = Math.round(s.y - 16);
+                    dialPositions.add(`${tlX},${tlY}`);
+                }
+            }
+        }
+
         const pipeLayers = (lvl.layerInstances || []).filter(l => l.__identifier === 'Pipes');
         for (const lay of pipeLayers) {
             for (const t of lay.gridTiles || []) {
+                const px = worldX + t.px[0];
+                const py = worldY + t.px[1];
+                if (dialPositions.has(`${px},${py}`)) {
+                    // Suppress static pipe beneath circuit dial so rotator controls flow
+                    continue;
+                }
                 this.pipes.push({
-                    x: worldX + t.px[0],
-                    y: worldY + t.px[1],
+                    x: px,
+                    y: py,
                     srcX: t.src[0],
                     srcY: t.src[1],
                     tileId: t.t
@@ -443,7 +463,41 @@ export class LDtkLevel extends Level {
         return base;
     }
 
-    _getDroneMessage(roomIndex, x, type) {
+    _getDroneMessage(roomIndex, x, type, context = null) {
+        if (context) {
+            const ctxKey = String(context).toLowerCase().trim();
+            if (ctxKey.includes('hang') || ctxKey.includes('circuits')) {
+                return '[LMB] = Wire To Circuit Dials\nHang and swing!';
+            }
+            if (ctxKey.includes('xor') || ctxKey.includes('or gate') || ctxKey.includes('or')) {
+                return 'XOR GATE:\nActive on 1 input\nConflict on 2 inputs';
+            }
+            if (ctxKey.includes('and gate')) {
+                return 'AND GATE:\nRequires BOTH inputs ON';
+            }
+            if (ctxKey.includes('laser') || ctxKey.includes('electrified')) {
+                return 'HAZARD WARNING:\nSever circuit to cut laser';
+            }
+            if (ctxKey.includes('door') || ctxKey.includes('puzzle') || ctxKey.includes('rotation')) {
+                return '[LMB] = Connect Wire\n[E] = Rotate Junction\nSolve puzzle to open door';
+            }
+            if (ctxKey.includes('charging')) {
+                return '[LMB] = Connect Wire to Charger\nAuto-Recharges Battery';
+            }
+            if (ctxKey.includes('wall run')) {
+                return '[W] = Wall Run\n[SPACE] = Wall Jump';
+            }
+            if (ctxKey.includes('swing') || ctxKey.includes('connect wire')) {
+                return '[LMB] = Shoot Wire\n[RMB] = Cut Wire\n[SPACE] = Swing Jump';
+            }
+            if (ctxKey.includes('jump')) {
+                return '[SPACE] = Jump';
+            }
+            if (ctxKey.includes('move')) {
+                return '[A] [D] = Move';
+            }
+            return context;
+        }
         if (roomIndex === 0) {
             if (x < 300) return '[A] [D] = Move';
             return '[SPACE] = Jump';
@@ -453,11 +507,11 @@ export class LDtkLevel extends Level {
             return '[SPACE] = Tether Jump';
         }
         if (roomIndex === 2) {
-            if (x < 1500) return 'Hold [S] = Recharge';
+            if (x < 1500) return '[LMB] = Connect Wire to Charger\nAuto-Recharges Battery';
             return '[SPACE] = Wall Jump\nHold [S] = Fast Slide';
         }
         if (roomIndex === 3) {
-            return '[E] = Rotate Junction\nInvert Dial = Cut Power';
+            return '[LMB] = Connect Wire\n[E] = Rotate Junction\nSolve puzzle to open door';
         }
         return '[A] [D] = Move';
     }
@@ -539,12 +593,12 @@ export class LDtkLevel extends Level {
 
         // Logic Gates in Level 2 & Level 3
         this.logicGates = [
-            { id: 'gate_1792_64', x: 1792, y: 64, type: 'OR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
-            { id: 'gate_1856_64', x: 1856, y: 64, type: 'OR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
+            { id: 'gate_1792_64', x: 1792, y: 64, type: 'XOR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
+            { id: 'gate_1856_64', x: 1856, y: 64, type: 'XOR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
             { id: 'gate_1824_32', x: 1824, y: 32, type: 'AND', orientation: 0, inPorts: [PORT.LEFT, PORT.RIGHT], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
             // Room 3 Logic Gates
             { id: 'gate_2048_160', x: 2048, y: 160, type: 'NOT', orientation: 0, inPorts: [PORT.LEFT], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false },
-            { id: 'gate_2432_128', x: 2432, y: 128, type: 'OR', orientation: 0, inPorts: [PORT.TOP, PORT.BOTTOM], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false },
+            { id: 'gate_2432_128', x: 2432, y: 128, type: 'XOR', orientation: 0, inPorts: [PORT.TOP, PORT.BOTTOM], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false },
             { id: 'gate_2464_160', x: 2464, y: 160, type: 'AND', orientation: 0, inPorts: [PORT.TOP, PORT.LEFT], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false }
         ];
 
@@ -678,6 +732,9 @@ export class LDtkLevel extends Level {
         const rm = this.rooms[Math.max(0, Math.min(this.rooms.length - 1, roomIndex))];
         if (rm.id === 'And_gate_3_above') {
             return { x: 3328, y: -192 };
+        }
+        if (rm.id === 'Level_7') {
+            return { x: rm.worldX + 64, y: rm.worldY + 128 };
         }
         return { x: rm.worldX + 64, y: rm.worldY + 192 };
     }
@@ -835,23 +892,70 @@ export class LDtkLevel extends Level {
             sock.render(ctx);
         }
 
-        // 4. Render Logic Gates
+        // 4. Render Power Sources (Industrial Generator Core)
+        this._renderPowerSources(ctx, camera);
+
+        // 5. Render Logic Gates
         this._renderLogicGates(ctx, camera);
 
-        // 5. Render Light Boxes
+        // 6. Render Light Boxes
         this._renderLightBoxes(ctx, camera);
 
-        // 6. Render Drones
+        // 7. Render Drones
         for (const drone of this.drones) {
             drone.render(ctx, camera);
         }
 
-        // 7. Room watermark in corner
+        // 8. Room watermark in corner
         ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.font = '10px monospace';
-        ctx.fillText(`SECTOR 0${this.activeRoomIndex + 1} / 0${this.totalRooms}`, this.activeRoomIndex * this.roomWidth + 16, 24);
+        const curRoom = (this.rooms && this.rooms[this.activeRoomIndex]) || null;
+        const rx = curRoom ? curRoom.worldX : this.activeRoomIndex * this.roomWidth;
+        const ry = curRoom ? curRoom.worldY : 0;
+        const sectorNum = String(this.activeRoomIndex + 1).padStart(2, '0');
+        const totalNum = String(this.totalRooms).padStart(2, '0');
+        ctx.fillText(`SECTOR ${sectorNum} / ${totalNum}`, rx + 16, ry + 24);
 
         ctx.restore();
+    }
+
+    _renderPowerSources(ctx, camera = null) {
+        if (!this.powerSources || this.powerSources.length === 0) return;
+        const sheet = this.assetLoader ? this.assetLoader.getImage('circuits_sheet') : null;
+
+        for (const src of this.powerSources) {
+            const sx = Math.round(src.x);
+            const sy = Math.round(src.y);
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(sx, sy, 32, 32, 32)) {
+                continue;
+            }
+
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+
+            // 1. Solid industrial mounting plate backing (eliminates background tile transparency gaps)
+            ctx.fillStyle = '#10151f';
+            ctx.fillRect(sx, sy, 32, 32);
+
+            // 2. Draw authentic 32x32 Generator Plate from Circuits(4).png [64, 160]
+            if (sheet) {
+                ctx.drawImage(sheet, 64, 160, 32, 32, sx, sy, 32, 32);
+            } else {
+                ctx.fillStyle = '#1c2432';
+                ctx.fillRect(sx + 2, sy + 2, 28, 28);
+                ctx.strokeStyle = '#2e3d52';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(sx + 2, sy + 2, 28, 28);
+            }
+
+            // 3. Grounded industrial power core indicator (golden lumen channel)
+            ctx.fillStyle = '#ffd000';
+            ctx.fillRect(sx + 13, sy + 13, 6, 6);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(sx + 15, sy + 15, 2, 2);
+
+            ctx.restore();
+        }
     }
 
     _renderLogicGates(ctx, camera = null) {
@@ -869,7 +973,8 @@ export class LDtkLevel extends Level {
 
     _renderSingleLogicGate(ctx, gate, gx, gy) {
         const isPowered = Boolean(gate.isPowered);
-        const type = (gate.type || 'AND').toUpperCase();
+        const rawType = (gate.type || 'AND').toUpperCase();
+        const type = (rawType === 'OR') ? 'XOR' : rawType;
 
         ctx.save();
 
@@ -912,9 +1017,9 @@ export class LDtkLevel extends Level {
 
         // Metallic contact pins on module edges
         ctx.fillStyle = isPowered ? '#55a8c9' : '#31445b';
-        ctx.fillRect(gx, gy + 8, 2.5, 2);   // Top input lead
-        ctx.fillRect(gx, gy + 15, 2.5, 2);  // Bottom input lead
-        ctx.fillRect(gx + 29.5, gy + 11.5, 2.5, 2); // Output lead
+        ctx.fillRect(gx, gy + 7.5, 2.5, 2);   // Top input lead
+        ctx.fillRect(gx, gy + 14.5, 2.5, 2);  // Bottom input lead
+        ctx.fillRect(gx + 29.5, gy + 11, 2.5, 2); // Output lead
 
         // Status LED diode in top-right corner: lit when powered, off when disconnected
         const ledX = gx + 25.5;
@@ -986,14 +1091,13 @@ export class LDtkLevel extends Level {
     }
 
     _renderGateSymbol(ctx, type, gx, gy, shouldFill = true) {
-        ctx.beginPath();
-
         if (type === 'AND') {
             // ANSI/IEEE Standard AND Gate
+            ctx.beginPath();
             // Input lead lines
-            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.moveTo(gx + 2.5, gy + 8.5);
             ctx.lineTo(gx + 7.5, gy + 8.5);
-            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.moveTo(gx + 2.5, gy + 15.5);
             ctx.lineTo(gx + 7.5, gy + 15.5);
 
             // Gate contour
@@ -1004,96 +1108,151 @@ export class LDtkLevel extends Level {
             ctx.closePath();
 
             // Output lead line
-            ctx.moveTo(gx + 20.5, gy + 12);
-            ctx.lineTo(gx + 25.5, gy + 12);
+            ctx.moveTo(gx + 21.5, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
+            return;
 
         } else if (type === 'OR') {
             // ANSI/IEEE Standard OR Gate
-            // Curved concave back + bowed sides to pointed tip
+            // 1. Closed main body
+            ctx.beginPath();
             ctx.moveTo(gx + 7.5, gy + 5.5);
             ctx.quadraticCurveTo(gx + 16, gy + 6.2, gx + 22.5, gy + 12);
             ctx.quadraticCurveTo(gx + 16, gy + 17.8, gx + 7.5, gy + 18.5);
             ctx.quadraticCurveTo(gx + 10.5, gy + 12, gx + 7.5, gy + 5.5);
             ctx.closePath();
 
-            // Input lead lines into curved back
-            ctx.moveTo(gx + 4.5, gy + 8.5);
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
+
+            // 2. Input & Output lead lines
+            ctx.beginPath();
+            ctx.moveTo(gx + 2.5, gy + 8.5);
             ctx.lineTo(gx + 8.8, gy + 8.5);
-            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.moveTo(gx + 2.5, gy + 15.5);
+            ctx.lineTo(gx + 8.8, gy + 15.5);
+            ctx.moveTo(gx + 22.5, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+            ctx.stroke();
+            return;
+
+        } else if (type === 'XOR') {
+            // ANSI/IEEE Standard XOR Gate
+            // 1. Closed main body
+            ctx.beginPath();
+            ctx.moveTo(gx + 7.5, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 16, gy + 6.2, gx + 22.5, gy + 12);
+            ctx.quadraticCurveTo(gx + 16, gy + 17.8, gx + 7.5, gy + 18.5);
+            ctx.quadraticCurveTo(gx + 10.5, gy + 12, gx + 7.5, gy + 5.5);
+            ctx.closePath();
+
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
+
+            // 2. Auxiliary curved input arc and lead lines
+            ctx.beginPath();
+            // Offset curved back line
+            ctx.moveTo(gx + 4.5, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 7.5, gy + 12, gx + 4.5, gy + 18.5);
+
+            // Input leads to auxiliary arc
+            ctx.moveTo(gx + 2.5, gy + 8.5);
+            ctx.lineTo(gx + 5.6, gy + 8.5);
+            ctx.moveTo(gx + 2.5, gy + 15.5);
+            ctx.lineTo(gx + 5.6, gy + 15.5);
+
+            // Continuous leads across arc into main body
+            ctx.moveTo(gx + 6.2, gy + 8.5);
+            ctx.lineTo(gx + 8.8, gy + 8.5);
+            ctx.moveTo(gx + 6.2, gy + 15.5);
             ctx.lineTo(gx + 8.8, gy + 15.5);
 
             // Output lead line
             ctx.moveTo(gx + 22.5, gy + 12);
-            ctx.lineTo(gx + 26.5, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+            ctx.stroke();
+            return;
 
         } else if (type === 'NOT') {
-            // Inverter Triangle + Inversion Bubble
+            // Inverter Triangle
+            ctx.beginPath();
             ctx.moveTo(gx + 7.5, gy + 6.5);
             ctx.lineTo(gx + 17.5, gy + 12);
             ctx.lineTo(gx + 7.5, gy + 17.5);
             ctx.closePath();
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
 
-            ctx.moveTo(gx + 21, gy + 12);
+            // Inversion Bubble + leads
+            ctx.beginPath();
             ctx.arc(gx + 19.5, gy + 12, 1.6, 0, Math.PI * 2);
-
-            ctx.moveTo(gx + 4.5, gy + 12);
+            ctx.moveTo(gx + 2.5, gy + 12);
             ctx.lineTo(gx + 7.5, gy + 12);
             ctx.moveTo(gx + 21.1, gy + 12);
-            ctx.lineTo(gx + 25.5, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+            ctx.stroke();
+            return;
 
         } else if (type === 'NAND') {
-            // AND shape with Bubble
+            // AND shape
+            ctx.beginPath();
             ctx.moveTo(gx + 7.5, gy + 5.5);
             ctx.lineTo(gx + 13, gy + 5.5);
             ctx.bezierCurveTo(gx + 19.5, gy + 5.5, gx + 19.5, gy + 18.5, gx + 13, gy + 18.5);
             ctx.lineTo(gx + 7.5, gy + 18.5);
             ctx.closePath();
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
 
-            ctx.moveTo(gx + 22.5, gy + 12);
+            // Bubble + leads
+            ctx.beginPath();
             ctx.arc(gx + 21, gy + 12, 1.5, 0, Math.PI * 2);
-
-            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.moveTo(gx + 2.5, gy + 8.5);
             ctx.lineTo(gx + 7.5, gy + 8.5);
-            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.moveTo(gx + 2.5, gy + 15.5);
             ctx.lineTo(gx + 7.5, gy + 15.5);
             ctx.moveTo(gx + 22.5, gy + 12);
-            ctx.lineTo(gx + 26, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+            ctx.stroke();
+            return;
 
         } else if (type === 'NOR') {
-            // OR shape with Bubble
+            // OR shape
+            ctx.beginPath();
             ctx.moveTo(gx + 7.5, gy + 5.5);
             ctx.quadraticCurveTo(gx + 15, gy + 6.2, gx + 20.5, gy + 12);
             ctx.quadraticCurveTo(gx + 15, gy + 17.8, gx + 7.5, gy + 18.5);
             ctx.quadraticCurveTo(gx + 10.5, gy + 12, gx + 7.5, gy + 5.5);
             ctx.closePath();
+            if (shouldFill) {
+                ctx.fill();
+            }
+            ctx.stroke();
 
-            ctx.moveTo(gx + 23.5, gy + 12);
+            // Bubble + leads
+            ctx.beginPath();
             ctx.arc(gx + 22, gy + 12, 1.5, 0, Math.PI * 2);
-
-            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.moveTo(gx + 2.5, gy + 8.5);
             ctx.lineTo(gx + 8.8, gy + 8.5);
-            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.moveTo(gx + 2.5, gy + 15.5);
             ctx.lineTo(gx + 8.8, gy + 15.5);
             ctx.moveTo(gx + 23.5, gy + 12);
-            ctx.lineTo(gx + 26.5, gy + 12);
-
-        } else if (type === 'XOR') {
-            // Auxiliary curved back line + OR body
-            ctx.moveTo(gx + 5, gy + 5.5);
-            ctx.quadraticCurveTo(gx + 8, gy + 12, gx + 5, gy + 18.5);
-
-            ctx.moveTo(gx + 8, gy + 5.5);
-            ctx.quadraticCurveTo(gx + 16, gy + 6.2, gx + 22.5, gy + 12);
-            ctx.quadraticCurveTo(gx + 16, gy + 17.8, gx + 8, gy + 18.5);
-            ctx.quadraticCurveTo(gx + 11, gy + 12, gx + 8, gy + 5.5);
-            ctx.closePath();
-
-            ctx.moveTo(gx + 3, gy + 8.5);
-            ctx.lineTo(gx + 6, gy + 8.5);
-            ctx.moveTo(gx + 3, gy + 15.5);
-            ctx.lineTo(gx + 6, gy + 15.5);
-            ctx.moveTo(gx + 22.5, gy + 12);
-            ctx.lineTo(gx + 26.5, gy + 12);
+            ctx.lineTo(gx + 29.5, gy + 12);
+            ctx.stroke();
+            return;
         }
 
         if (shouldFill) {
@@ -1236,6 +1395,22 @@ export class LDtkLevel extends Level {
                     haz.cutoffBoxId = 'lightbox_3776_-256';
                 }
             }
+            // Room 7: Level_7 (worldX: 3840..4480, worldY: -320..0)
+            else if (haz.x >= 3840 && haz.y < 0) {
+                haz.cutoffBoxId = 'lightbox_4448_-128';
+                haz.isCorridorBeam = true;
+            }
+
+            // Fallback: match single lightbox in same room sector if not specifically mapped
+            if (!haz.cutoffBoxId && this.lightBoxes.length > 0) {
+                const roomBoxes = this.lightBoxes.filter(b => 
+                    Math.abs(b.x - haz.x) < 640 &&
+                    ((haz.y < 0 && b.y < 0) || (haz.y >= 0 && b.y >= 0))
+                );
+                if (roomBoxes.length === 1) {
+                    haz.cutoffBoxId = roomBoxes[0].id;
+                }
+            }
         }
     }
 
@@ -1263,13 +1438,30 @@ export class LDtkLevel extends Level {
         if (relGx === 13 && relGy === 4) {
             return { inPorts: [PORT.TOP, PORT.RIGHT], outPorts: [PORT.BOTTOM] };
         }
-        // Room 6 (And_gate_3_above): OR gate at rel [6, 6] -> Inputs: Left, Right. Output: Top.
+        // Room 6 (And_gate_3_above): XOR gate at rel [6, 6] -> Inputs: Left, Right. Output: Top.
         if (relGx === 6 && relGy === 6) {
             return { inPorts: [PORT.LEFT, PORT.RIGHT], outPorts: [PORT.TOP] };
         }
         // Room 6 (And_gate_3_above): gates at rel [12, 0], [14, 0], [16, 0] -> Inputs: Left, Bottom. Output: Right.
         if ((relGx === 12 || relGx === 14 || relGx === 16) && relGy === 0) {
             return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        // Room 7 (Level_7):
+        // (2, 0) XOR: Inputs Left, Bottom. Output Right.
+        // (8, 2) AND: Inputs Left, Bottom. Output Right.
+        // (8, 4) AND: Inputs Left, Bottom. Output Right.
+        // (12, 4) XOR: Inputs Left, Bottom. Output Right.
+        // (15, 1) AND: Inputs Left, Bottom. Output Right.
+        if ((relGx === 2 && relGy === 0) ||
+            (relGx === 8 && relGy === 2) ||
+            (relGx === 8 && relGy === 4) ||
+            (relGx === 12 && relGy === 4) ||
+            (relGx === 15 && relGy === 1)) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        // (12, 2) AND: Inputs Left, Bottom. Output Top.
+        if (relGx === 12 && relGy === 2) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
         }
         return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
     }

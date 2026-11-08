@@ -237,14 +237,19 @@ export class HazardSystem {
                 const face = rawFace.toLowerCase();
 
                 const segments = [];
-                // Check if this is a horizontal corridor beam (e.g. spanning wall-run shaft or tagged isCorridorBeam)
+                // Check if this is a corridor laser beam (e.g. spanning wall-run shaft or doorway corridor)
                 const isCorridorBeam = Boolean(col.isCorridorBeam) || 
                                        face === 'beam' ||
-                                       ((face === 'all' || face === 'all_sides') && col.width > col.height && col.width <= 128);
+                                       ((face === 'all' || face === 'all_sides') && ((col.width > col.height && col.width <= 128) || (col.height > col.width && col.height <= 128)));
 
                 if (isCorridorBeam) {
-                    const midY = col.y + col.height / 2;
-                    segments.push({ x1: col.x, y1: midY, x2: col.x + col.width, y2: midY, isHoriz: true });
+                    if (col.height > col.width) {
+                        const midX = col.x + col.width / 2;
+                        segments.push({ x1: midX, y1: col.y, x2: midX, y2: col.y + col.height, isHoriz: false });
+                    } else {
+                        const midY = col.y + col.height / 2;
+                        segments.push({ x1: col.x, y1: midY, x2: col.x + col.width, y2: midY, isHoriz: true });
+                    }
                 } else if (face === 'top' || face === 'up') {
                     segments.push({ x1: col.x, y1: col.y, x2: col.x + col.width, y2: col.y, isHoriz: true });
                 } else if (face === 'bottom' || face === 'down') {

@@ -5,7 +5,7 @@
  * Rendered using authentic pixel-art frames and buttons.
  */
 export class MainMenu {
-    constructor({ uiTheme, audioManager, saveManager, onStartGame, onContinue, onOptions }) {
+    constructor({ uiTheme, audioManager, saveManager, onStartGame, onContinue, onOptions, onCredits }) {
         this.theme = uiTheme;
         this.audio = audioManager;
         this.saveManager = saveManager;
@@ -13,6 +13,7 @@ export class MainMenu {
         this.onStartGame = onStartGame;
         this.onContinue = onContinue;
         this.onOptions = onOptions;
+        this.onCredits = onCredits;
 
         this.hoveredBtn = null;
         this.lastHoveredBtn = null;
@@ -61,22 +62,25 @@ export class MainMenu {
                 if (this.onContinue) this.onContinue();
             } else if (this.hoveredBtn === 'options') {
                 if (this.onOptions) this.onOptions();
+            } else if (this.hoveredBtn === 'credits') {
+                if (this.onCredits) this.onCredits();
             }
         }
     }
 
     _getButtonBounds(hasSave) {
         const cx = 1280 / 2;
-        const frameY = 245;
-        const startY = frameY + 35;
+        const frameY = 225;
+        const startY = frameY + 28;
         const btnW = 280;
         const btnH = 38;
-        const spacing = 16;
+        const spacing = 14;
 
         return [
             { id: 'start', text: 'START GAME', x: cx - btnW / 2, y: startY, width: btnW, height: btnH, disabled: false, variant: 'amber' },
             { id: 'continue', text: 'CONTINUE', x: cx - btnW / 2, y: startY + (btnH + spacing), width: btnW, height: btnH, disabled: !hasSave, variant: 'slate' },
-            { id: 'options', text: 'OPTIONS', x: cx - btnW / 2, y: startY + (btnH + spacing) * 2, width: btnW, height: btnH, disabled: false, variant: 'slate' }
+            { id: 'options', text: 'OPTIONS', x: cx - btnW / 2, y: startY + (btnH + spacing) * 2, width: btnW, height: btnH, disabled: false, variant: 'slate' },
+            { id: 'credits', text: 'CREDITS', x: cx - btnW / 2, y: startY + (btnH + spacing) * 3, width: btnW, height: btnH, disabled: false, variant: 'slate' }
         ];
     }
 
@@ -90,17 +94,17 @@ export class MainMenu {
 
         // 1px Pixel drop shadow
         ctx.fillStyle = '#05070a';
-        ctx.fillText('TETHER PLATFORMER', 640 + 2, 195 + 2);
+        ctx.fillText('TETHER PLATFORMER', 640 + 2, 175 + 2);
 
         // Amber pixel header
         ctx.fillStyle = '#f4b03c';
-        ctx.fillText('TETHER PLATFORMER', 640, 195);
+        ctx.fillText('TETHER PLATFORMER', 640, 175);
 
         // 2. Central Window Frame
         const frameW = 400;
-        const frameH = 240;
+        const frameH = 270;
         const frameX = 640 - frameW / 2;
-        const frameY = 245;
+        const frameY = 225;
         this.theme.drawFrame(ctx, frameX, frameY, frameW, frameH, 0);
 
         // 3. Buttons

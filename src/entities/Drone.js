@@ -27,10 +27,11 @@ export class Drone {
         this.y = y;
         this.width = options.width || 32;
         this.height = options.height || 32;
-        this.type = options.type || 'Tutorial_Drone';
+        this.type = 'Tutorial_Drone'; // Unified mode: all drones are tutorial drones
         this.message = options.message || '';
         this.assetLoader = options.assetLoader || null;
         this.eventBus = options.eventBus || null;
+        this.roomIndex = options.roomIndex !== undefined ? options.roomIndex : 999;
 
         // Visual animation & hover state
         this.hoverTimer = Math.random() * Math.PI * 2;
@@ -40,18 +41,30 @@ export class Drone {
         this.fps = 8; // 8 FPS for smooth 4-frame thruster/sensor cycle
         this.facing = 1; // 1 = right, -1 = left
 
-        // Proximity & interaction state
+        // Proximity, interaction & onboarding click state
         this.isPlayerNear = false;
         this.talkRadius = 90;
         this.speechBubbleAlpha = 0;
         this.isOpen = false;
         this.isHovered = false;
+        this.hasBeenClicked = false;
+        this.blinkTimer = Math.random() * Math.PI * 2;
+        this._lastBubbleRect = null;
+
+        if (this.eventBus) {
+            this.eventBus.on('DRONE_OPENED', (activeDroneId) => {
+                if (activeDroneId !== this.id) {
+                    this.isOpen = false;
+                }
+            });
+        }
     }
 
     update(dt, player, input = null) {
-        // 1. Hover thruster oscillation
+        // 1. Hover thruster oscillation & onboarding blink
         this.hoverTimer += dt * 3.2;
         this.hoverOffset = Math.sin(this.hoverTimer) * 3;
+        this.blinkTimer += dt;
 
         // 2. Cycle animation frames (4 frames per row)
         this.frameTimer += dt;
@@ -61,26 +74,14 @@ export class Drone {
             this.frameIndex = (this.frameIndex + 1) % 4;
         }
 
-        // 3. Proximity detection and facing direction
+        // 3. Facing direction towards player (from any distance across the sector)
         if (player) {
             const centerX = this.x + this.width / 2;
-            const centerY = this.y + this.height / 2;
             const pCenterX = player.x + player.width / 2;
-            const pCenterY = player.y + player.height / 2;
-
-            const dist = Math.hypot(centerX - pCenterX, centerY - pCenterY);
-            this.isPlayerNear = dist < this.talkRadius;
-
-            // Turn towards player when nearby
-            if (this.isPlayerNear) {
-                this.facing = pCenterX < centerX ? -1 : 1;
-            } else if (dist > this.talkRadius * 1.6) {
-                // Auto-dismiss tip if player walks away
-                this.isOpen = false;
-            }
+            this.facing = pCenterX < centerX ? -1 : 1;
         }
 
-        // 4. Click detection to toggle tip
+        // 4. Click detection to toggle tutorial window from any distance
         const drawY = Math.round(this.y + this.hoverOffset);
         if (input) {
             const mx = input.mouseWorld.x;
@@ -92,15 +93,28 @@ export class Drone {
                 my <= drawY + this.height + 6
             );
 
-            if (input.leftPressedThisFrame && this.isHovered) {
-                this.isOpen = !this.isOpen;
-                if (this.eventBus) {
-                    this.eventBus.emit('DRONE_INTERACT', { isOpen: this.isOpen });
+            // Check if clicking open speech bubble to dismiss
+            let bubbleClicked = false;
+            if (this.isOpen && this._lastBubbleRect) {
+                const b = this._lastBubbleRect;
+                bubbleClicked = (mx >= b.x && mx <= b.x + b.width && my >= b.y && my <= b.y + b.height);
+            }
+
+            if (input.leftPressedThisFrame) {
+                if (this.isHovered) {
+                    this.isOpen = !this.isOpen;
+                    this.hasBeenClicked = true;
+                    if (this.isOpen && this.eventBus) {
+                        this.eventBus.emit('DRONE_OPENED', this.id);
+                        this.eventBus.emit('DRONE_INTERACT', { isOpen: true, id: this.id });
+                    }
+                } else if (bubbleClicked) {
+                    this.isOpen = false;
                 }
             }
         }
 
-        // 5. Smooth tip fade (only appears when drone is clicked/open)
+        // 5. Smooth tip fade (remains open until explicitly toggled or dismissed)
         const targetAlpha = (this.isOpen && this.message) ? 1 : 0;
         this.speechBubbleAlpha += (targetAlpha - this.speechBubbleAlpha) * 0.2;
     }
@@ -143,8 +157,29 @@ export class Drone {
             ctx.strokeRect(this.x, drawY, this.width, this.height);
         }
 
-        // Subtle hover indicator when clickable and closed
-        if (this.isHovered && !this.isOpen && this.speechBubbleAlpha < 0.1) {
+        // 1. Blinking [CLICK] onboarding indicator for first 2 rooms until clicked for the first time
+        const shouldBlink = (this.roomIndex < 2) && !this.hasBeenClicked && !this.isOpen;
+        if (shouldBlink) {
+            // Clean rhythmic pixel-art blink cycle
+            const isBlinkVisible = (Math.sin(this.blinkTimer * 5.5) > -0.2);
+            if (isBlinkVisible) {
+                ctx.save();
+                ctx.font = '10px CyberpunkPixel, monospace';
+                ctx.textAlign = 'center';
+                const textX = Math.round(this.x + this.width / 2);
+                const textY = Math.round(drawY - 8);
+
+                // 1px drop shadow
+                ctx.fillStyle = '#05070a';
+                ctx.fillText('[CLICK]', textX + 1, textY + 1);
+
+                // Golden amber pixel text
+                ctx.fillStyle = '#f4b03c';
+                ctx.fillText('[CLICK]', textX, textY);
+                ctx.restore();
+            }
+        } else if (this.isHovered && !this.isOpen && this.speechBubbleAlpha < 0.1) {
+            // Subtle hover indicator when clickable and closed
             ctx.save();
             ctx.font = '10px CyberpunkPixel, monospace';
             ctx.textAlign = 'center';
@@ -251,6 +286,8 @@ export class Drone {
         if (boxY + boxHeight > screenBottom) {
             boxY = Math.max(screenTop, screenBottom - boxHeight);
         }
+
+        this._lastBubbleRect = { x: boxX, y: boxY, width: boxWidth, height: boxHeight };
 
         // Minimalist dark slate backdrop (NO neon border)
         ctx.fillStyle = '#0a0e16';

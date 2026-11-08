@@ -604,13 +604,13 @@ export class PlayerMovement {
         }
 
         // 4. Ceiling boundary clamp:
-        // Inside And_gate_3_above, row 0 is solid across all columns (ceiling at -288)
+        // Inside And_gate_3_above and Level_7, row 0 is solid across all columns (ceiling at -288)
         const activeRoom = (this.level && this.level.rooms && this.level.rooms[this.level.activeRoomIndex]) || null;
         const facilityCeilingY = (this.level && this.level.rooms && this.level.rooms.length > 0)
             ? Math.min(...this.level.rooms.map(r => r.worldY))
             : -320;
 
-        if (activeRoom && activeRoom.id === 'And_gate_3_above') {
+        if (activeRoom && (activeRoom.id === 'And_gate_3_above' || activeRoom.id === 'Level_7' || activeRoom.worldY < 0)) {
             if (p.y < activeRoom.worldY + 32) {
                 p.y = activeRoom.worldY + 32;
                 if (p.vy < 0) p.vy = 0;

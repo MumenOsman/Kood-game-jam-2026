@@ -101,7 +101,8 @@ export class CircuitSystem {
             wasPowered: false,
             deviceId: nodeConfig.deviceId || null,
             neighbors: nodeConfig.neighbors || [],
-            label: nodeConfig.label || ''
+            label: nodeConfig.label || '',
+            design: nodeConfig.design || null
         };
 
         this.nodes.set(node.id, node);

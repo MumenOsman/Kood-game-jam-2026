@@ -7,11 +7,12 @@
  * - PAUSED
  * - OPTIONS
  */
-import { UITheme } from './UITheme.js';
-import { MainMenu } from './MainMenu.js';
-import { PauseMenu } from './PauseMenu.js';
-import { OptionsMenu } from './OptionsMenu.js?v=20261108_v1';
-import { VictoryModal } from './VictoryModal.js?v=20261108_v1';
+import { UITheme } from './UITheme.js?v=20261108_v11';
+import { MainMenu } from './MainMenu.js?v=20261108_v11';
+import { PauseMenu } from './PauseMenu.js?v=20261108_v11';
+import { OptionsMenu } from './OptionsMenu.js?v=20261108_v11';
+import { VictoryModal } from './VictoryModal.js?v=20261108_v11';
+import { CreditsScreen } from './CreditsScreen.js?v=20261108_v12';
 
 export class UIManager {
     constructor({ assetLoader, audioManager, saveManager, inputManager, onStartNewGame, onLoadGame, onRestartLevel, onRestartGame, onExitToMenu }) {
@@ -28,7 +29,7 @@ export class UIManager {
 
         this.theme = new UITheme(assetLoader);
 
-        this.state = 'MAIN_MENU'; // 'MAIN_MENU' | 'PLAYING' | 'PAUSED' | 'OPTIONS' | 'VICTORY'
+        this.state = 'MAIN_MENU'; // 'MAIN_MENU' | 'PLAYING' | 'PAUSED' | 'OPTIONS' | 'VICTORY' | 'CREDITS'
         this.previousState = 'MAIN_MENU';
 
         // Child views
@@ -38,7 +39,8 @@ export class UIManager {
             saveManager: this.saveManager,
             onStartGame: () => this.handleStartGame(),
             onContinue: () => this.handleContinueGame(),
-            onOptions: () => this.openOptions()
+            onOptions: () => this.openOptions(),
+            onCredits: () => this.openCredits()
         });
 
         this.pauseMenu = new PauseMenu({
@@ -63,6 +65,12 @@ export class UIManager {
             audioManager: this.audio,
             onPlayAgain: () => this.handleStartGame(),
             onExitToMainMenu: () => this.handleExitToMainMenu()
+        });
+
+        this.creditsScreen = new CreditsScreen({
+            uiTheme: this.theme,
+            audioManager: this.audio,
+            onReturnToMenu: () => this.handleExitToMainMenu()
         });
 
         // Start menu music
@@ -94,8 +102,18 @@ export class UIManager {
     }
 
     showVictory() {
-        if (this.state === 'VICTORY') return;
-        this.state = 'VICTORY';
+        this.showCredits();
+    }
+
+    openCredits() {
+        this.previousState = this.state;
+        this.state = 'CREDITS';
+        if (this.audio) this.audio.playFx('ui_click');
+    }
+
+    showCredits() {
+        if (this.state === 'CREDITS') return;
+        this.state = 'CREDITS';
         if (this.audio) {
             this.audio.playFx('circuit_solved');
             this.audio.playFx('access_granted');
@@ -167,6 +185,9 @@ export class UIManager {
                     this.closeOptions();
                 }
                 return;
+            } else if (this.state === 'CREDITS') {
+                this.handleExitToMainMenu();
+                return;
             }
         }
 
@@ -179,6 +200,8 @@ export class UIManager {
             this.optionsMenu.update(dt, this.input);
         } else if (this.state === 'VICTORY') {
             this.victoryModal.update(dt, this.input);
+        } else if (this.state === 'CREDITS') {
+            this.creditsScreen.update(dt, this.input);
         }
     }
 
@@ -191,6 +214,8 @@ export class UIManager {
             this.optionsMenu.render(ctx);
         } else if (this.state === 'VICTORY') {
             this.victoryModal.render(ctx);
+        } else if (this.state === 'CREDITS') {
+            this.creditsScreen.render(ctx);
         }
     }
 }

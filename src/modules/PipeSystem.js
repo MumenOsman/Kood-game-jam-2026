@@ -83,15 +83,30 @@ export class PipeSystem {
     }
 
     loadPipes(rawPipes) {
+        // Collect all dial grid positions to prevent static pipes from bypassing circuit rotators
+        const dialGridKeys = new Set();
+        if (this.circuitSystem && this.circuitSystem.nodes) {
+            for (const node of this.circuitSystem.nodes.values()) {
+                const gx = Math.round((node.x - 16) / 32);
+                const gy = Math.round((node.y - 16) / 32);
+                dialGridKeys.add(`${gx},${gy}`);
+            }
+        }
+
         this.pipes = [];
         for (const p of rawPipes) {
+            const gx = Math.round(p.x / 32);
+            const gy = Math.round(p.y / 32);
+            if (dialGridKeys.has(`${gx},${gy}`)) {
+                continue;
+            }
             const info = this._classifyPipe(p.srcX, p.srcY);
             this.pipes.push({
                 id: `pipe_${p.x}_${p.y}`,
                 x: p.x,
                 y: p.y,
-                gridX: Math.round(p.x / 32),
-                gridY: Math.round(p.y / 32),
+                gridX: gx,
+                gridY: gy,
                 srcX: p.srcX,
                 srcY: p.srcY,
                 tileId: p.tileId,
@@ -157,18 +172,9 @@ export class PipeSystem {
             grid.get(key).push(item);
         };
 
-        // 1. Index all pipes
-        for (const p of this.pipes) {
-            p.gx = p.gridX;
-            p.gy = p.gridY;
-            p.kind = 'PIPE';
-            p.isPowered = false;
-            p.flowDir = { dx: 0, dy: 1 };
-            addToGrid(p.gx, p.gy, p);
-        }
-
-        // 2. Index all circuit dials
+        // 1. Index all circuit dials first
         const dials = [];
+        const dialGridKeys = new Set();
         if (this.circuitSystem && this.circuitSystem.nodes) {
             for (const node of this.circuitSystem.nodes.values()) {
                 const gx = Math.round((node.x - 16) / 32);
@@ -178,8 +184,20 @@ export class PipeSystem {
                 node.kind = 'DIAL';
                 node.isPowered = (node.type === 'SOURCE');
                 dials.push(node);
+                dialGridKeys.add(`${gx},${gy}`);
                 addToGrid(gx, gy, node);
             }
+        }
+
+        // 2. Index all pipes (skipping any cell occupied by a circuit dial)
+        for (const p of this.pipes) {
+            if (dialGridKeys.has(`${p.gridX},${p.gridY}`)) continue;
+            p.gx = p.gridX;
+            p.gy = p.gridY;
+            p.kind = 'PIPE';
+            p.isPowered = false;
+            p.flowDir = { dx: 0, dy: 1 };
+            addToGrid(p.gx, p.gy, p);
         }
 
         // 3. Index all logic gates
