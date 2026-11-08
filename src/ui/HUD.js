@@ -7,8 +7,8 @@ export class HUD {
     constructor(player, camera) {
         this.player = player;
         this.camera = camera;
-        this.statusMessage = 'System Online. Explore and restore power.';
-        this.statusTimer = 5;
+        this.statusMessage = '';
+        this.statusTimer = 0;
 
         // Trailing depletion ghost bar
         this.ghostBattery = player.battery;
@@ -17,16 +17,13 @@ export class HUD {
     }
 
     setMessage(msg, duration = 4) {
-        this.statusMessage = msg;
-        this.statusTimer = duration;
+        // Notification pop-ups disabled per user preference
+        this.statusMessage = '';
+        this.statusTimer = 0;
     }
 
     update(dt) {
         this.pulsePhase += dt * 5;
-
-        if (this.statusTimer > 0) {
-            this.statusTimer -= dt;
-        }
 
         // Smoothly interpolate ghost battery towards current battery
         if (this.ghostBattery > this.player.battery) {
@@ -35,10 +32,9 @@ export class HUD {
             this.ghostBattery = this.player.battery;
         }
 
-        // Trigger alert banner on low power
+        // Low power tracking
         if (this.player.isLowPower && !this.lowPowerWarned) {
             this.lowPowerWarned = true;
-            this.setMessage('LOW POWER WARNING: Sprinting offline. Rest or recharge.', 4);
         } else if (!this.player.isLowPower && !this.player.isDepleted) {
             this.lowPowerWarned = false;
         }
@@ -53,83 +49,147 @@ export class HUD {
         // 2. Contextual Prompt near Player
         this._renderContextPrompt(ctx);
 
-        // 3. Status Notification banner
-        if (this.statusTimer > 0 && this.statusMessage) {
-            this._renderStatusBanner(ctx);
-        }
-
         ctx.restore();
     }
 
     _renderBatteryGauge(ctx) {
         const p = this.player;
-        const x = 24;
-        const y = 24;
-        const width = 160;
-        const height = 18;
+        const x = 20;
+        const y = 20;
+        const width = 230;
+        const height = 48;
 
-        // Background box
-        ctx.fillStyle = 'rgba(18, 22, 28, 0.85)';
-        ctx.fillRect(x - 8, y - 8, width + 55, height + 16);
-        ctx.strokeStyle = p.isDepleted
-            ? '#ff3344'
+        ctx.save();
+
+        // 1. Outer Chassis / Frame (Grounded Industrial Pixel Art)
+        // Background plate
+        ctx.fillStyle = 'rgba(14, 18, 26, 0.94)';
+        ctx.fillRect(x, y, width, height);
+
+        // Frame Border - tinted crimson when depleted, amber when low, steel-blue nominal
+        const frameBorderColor = p.isDepleted
+            ? '#d93b3b'
             : p.isLowPower
-            ? '#ffaa00'
-            : '#2f3846';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(x - 8, y - 8, width + 55, height + 16);
+            ? '#f4b03c'
+            : '#37446e';
+        ctx.strokeStyle = frameBorderColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
 
-        // Battery label
-        ctx.fillStyle = p.isLowPower ? '#ffaa00' : '#b0bec5';
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText('POWER', x, y - 1);
+        // Subtle 1px inner dark bevel
+        ctx.strokeStyle = '#1a2232';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, y + 2, width - 4, height - 4);
 
-        // Battery meter bar background
-        ctx.fillStyle = '#10141a';
-        ctx.fillRect(x, y + 4, width, height - 4);
+        // Corner rivets (authentic 2x2 px metal studs)
+        ctx.fillStyle = '#5a6e94';
+        ctx.fillRect(x + 4, y + 4, 2, 2);
+        ctx.fillRect(x + width - 6, y + 4, 2, 2);
+        ctx.fillRect(x + 4, y + height - 6, 2, 2);
+        ctx.fillRect(x + width - 6, y + height - 6, 2, 2);
 
-        // Trailing depletion ghost bar (soft light-red/white)
+        // 2. Header Row (Entirely inside frame)
+        ctx.font = '12px CyberpunkPixel, monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        // Title: BATTERY with 1px drop shadow
+        const labelX = x + 10;
+        const labelY = y + 8;
+        ctx.fillStyle = '#05070a';
+        ctx.fillText('BATTERY', labelX + 1, labelY + 1);
+        ctx.fillStyle = p.isLowPower ? '#f4b03c' : '#dce5f0';
+        ctx.fillText('BATTERY', labelX, labelY);
+
+        // State Tag ([CHARGING], [LOW], [DEPLETED])
+        let statusTag = '';
+        let tagColor = '#f4b03c';
+        if (p.isCharging) {
+            statusTag = '[CHARGING]';
+            tagColor = '#f4b03c';
+        } else if (p.isDepleted) {
+            statusTag = '[DEPLETED]';
+            tagColor = '#d93b3b';
+        } else if (p.isLowPower) {
+            statusTag = '[LOW]';
+            tagColor = '#f4b03c';
+        }
+
+        if (statusTag) {
+            ctx.fillStyle = '#05070a';
+            ctx.fillText(statusTag, labelX + 72 + 1, labelY + 1);
+            ctx.fillStyle = tagColor;
+            ctx.fillText(statusTag, labelX + 72, labelY);
+        }
+
+        // Percentage text (aligned to the right inside frame)
+        const pctText = `${Math.round(p.battery)}%`;
+        ctx.textAlign = 'right';
+        const pctX = x + width - 10;
+        ctx.fillStyle = '#05070a';
+        ctx.fillText(pctText, pctX + 1, labelY + 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(pctText, pctX, labelY);
+
+        // 3. Battery Meter Inset Trough (inside frame)
+        const barX = x + 10;
+        const barY = y + 26;
+        const barW = width - 20;
+        const barH = 14;
+
+        // Inset trough background & border
+        ctx.fillStyle = '#080b10';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.strokeStyle = '#273449';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+
+        // Trailing depletion ghost bar
         const ghostPct = Math.max(0, Math.min(1, this.ghostBattery / p.maxBattery));
         if (this.ghostBattery > p.battery) {
-            ctx.fillStyle = 'rgba(255, 120, 120, 0.45)';
-            ctx.fillRect(x + 1, y + 5, (width - 2) * ghostPct, height - 6);
+            const ghostW = Math.round((barW - 2) * ghostPct);
+            ctx.fillStyle = 'rgba(230, 80, 80, 0.45)';
+            ctx.fillRect(barX + 1, barY + 1, ghostW, barH - 2);
         }
 
-        // Fill percentage
+        // Battery Fill
         const pct = Math.max(0, Math.min(1, p.battery / p.maxBattery));
-        let fillColor = '#00e676'; // Nominal green
+        const fillW = Math.round((barW - 2) * pct);
+
+        let fillColor = '#3cd070'; // Nominal emerald green
+        let highlightColor = '#86efac';
         if (p.isCharging) {
-            fillColor = '#00ffcc';
+            fillColor = '#f4b03c';
+            highlightColor = '#fef08a';
         } else if (p.isDepleted) {
-            fillColor = '#ff2233';
+            fillColor = '#d93b3b';
+            highlightColor = '#f87171';
         } else if (p.isLowPower) {
             const pulse = (Math.sin(this.pulsePhase) + 1) / 2;
-            fillColor = pulse > 0.5 ? '#ff3b30' : '#ff8800';
-        } else if (pct < 0.55) {
-            fillColor = '#ffcc00';
+            fillColor = pulse > 0.5 ? '#d93b3b' : '#f4b03c';
+            highlightColor = pulse > 0.5 ? '#f87171' : '#fef08a';
+        } else if (pct < 0.5) {
+            fillColor = '#e6a122';
+            highlightColor = '#fde68a';
         }
 
-        ctx.fillStyle = fillColor;
-        ctx.fillRect(x + 1, y + 5, (width - 2) * pct, height - 6);
+        if (fillW > 0) {
+            ctx.fillStyle = fillColor;
+            ctx.fillRect(barX + 1, barY + 1, fillW, barH - 2);
 
-        // Battery percentage text
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px monospace';
-        ctx.fillText(`${Math.round(p.battery)}%`, x + width + 8, y + 13);
-
-        if (p.isCharging) {
-            ctx.fillStyle = '#00ffcc';
-            ctx.font = '9px monospace';
-            ctx.fillText('CHARGING', x + 50, y - 1);
-        } else if (p.isDepleted) {
-            ctx.fillStyle = '#ff3344';
-            ctx.font = '9px monospace';
-            ctx.fillText('DEPLETED', x + 50, y - 1);
-        } else if (p.isLowPower) {
-            ctx.fillStyle = '#ffaa00';
-            ctx.font = '9px monospace';
-            ctx.fillText('LOW', x + 50, y - 1);
+            // 1px top highlight for crisp authentic pixel bevel
+            ctx.fillStyle = highlightColor;
+            ctx.fillRect(barX + 1, barY + 1, fillW, 2);
         }
+
+        // 4. Subtle cell divider ticks at 25%, 50%, 75%
+        for (const frac of [0.25, 0.5, 0.75]) {
+            const tickX = Math.round(barX + barW * frac);
+            ctx.fillStyle = '#080b10';
+            ctx.fillRect(tickX, barY, 1, barH);
+        }
+
+        ctx.restore();
     }
 
     _renderContextPrompt(ctx) {
@@ -155,18 +215,18 @@ export class HUD {
         if (prompt) {
             const screenPos = this.camera.worldToScreen(p.x + p.width / 2, p.y - 18);
 
-            ctx.font = 'bold 12px monospace';
+            ctx.font = '12px CyberpunkPixel, monospace';
             const metrics = ctx.measureText(prompt);
             const boxW = metrics.width + 16;
             const boxH = 22;
 
-            ctx.fillStyle = 'rgba(15, 20, 26, 0.88)';
+            ctx.fillStyle = 'rgba(14, 18, 25, 0.92)';
             ctx.fillRect(screenPos.x - boxW / 2, screenPos.y - boxH / 2, boxW, boxH);
-            ctx.strokeStyle = '#ffb700';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#37446e';
+            ctx.lineWidth = 1.5;
             ctx.strokeRect(screenPos.x - boxW / 2, screenPos.y - boxH / 2, boxW, boxH);
 
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#f4b03c';
             ctx.textAlign = 'center';
             ctx.fillText(prompt, screenPos.x, screenPos.y + 4);
             ctx.textAlign = 'left';
@@ -174,29 +234,7 @@ export class HUD {
     }
 
     _renderStatusBanner(ctx) {
-        const alpha = Math.min(1, this.statusTimer);
-        ctx.save();
-        ctx.globalAlpha = alpha;
-
-        const x = ctx.canvas.width / 2;
-        const y = 35;
-
-        ctx.font = '13px monospace';
-        const metrics = ctx.measureText(this.statusMessage);
-        const w = metrics.width + 28;
-        const h = 28;
-
-        ctx.fillStyle = 'rgba(20, 26, 34, 0.9)';
-        ctx.fillRect(x - w / 2, y - h / 2, w, h);
-        ctx.strokeStyle = '#00ddff';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-
-        ctx.fillStyle = '#00ddff';
-        ctx.textAlign = 'center';
-        ctx.fillText(this.statusMessage, x, y + 4);
-
-        ctx.restore();
+        // Notification pop-up banners disabled
     }
 }
 
