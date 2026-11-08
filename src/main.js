@@ -22,7 +22,7 @@ import { HUD } from './ui/HUD.js?v=20261108_v15';
 import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
 import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
 import { UIManager } from './ui/UIManager.js?v=20261108_v13';
-import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v29';
+import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v28';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
@@ -253,11 +253,7 @@ async function bootstrap() {
             if (roomIndex === 12) {
                 const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, 12));
                 level.activeRoomIndex = targetIdx;
-                const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(targetIdx) : { x: 0, y: 0 };
-                player.x = cp.x;
-                player.y = cp.y;
                 player.isVisible = false;
-                camera.snapTo(cp.x, cp.y);
                 if (creditFlightScene) {
                     creditFlightScene.startFlightRunnerDirectly();
                 }
@@ -348,8 +344,6 @@ async function bootstrap() {
         audioManager,
         uiTheme: uiManager.theme,
         eventBus,
-        camera,
-        player,
         onComplete: () => {
             isGameCompleted = true;
             saveManager.markLevelCompleted(11); // Mark Sector 12 complete
