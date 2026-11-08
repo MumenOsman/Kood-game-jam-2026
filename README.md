@@ -1,109 +1,105 @@
 # TetherMind
 
-> A high-momentum 2D puzzle platformer where electricity is both your lifeline and your greatest puzzle.
-
 Created for the **//kood Game Jam [Platformers] 2026**.  
 Solo developed with love (and plenty of caffeine) by **Mumen Osman** ([mumen.dev](https://mumen.dev)).
 
 ---
 
-## What is TetherMind?
+## Welcome to TetherMind
 
-In **TetherMind**, you step into the chassis of a nimble, pacifist utility droid trapped deep inside a labyrinthine industrial power sector. The facility's automated security grid has malfunctioned—deadly high-voltage hazard barriers block every corridor, heavy blast doors are sealed shut, and backup power is dead.
+TetherMind is a 2D puzzle platformer all about swinging, wall running, and rewiring electrical circuits. You play as a little maintenance robot trapped in a powered down industrial facility. There are no enemies to fight and no weapons to shoot. Your goal is simply to make your way through each room by restoring power to blast doors and shutting off dangerous electrical hazards.
 
-Your only weapon? **A high-tensile, electrified tether cable** attached to your head.
-
-By slinging your plug across chasms, anchoring to ceiling mounts, running up vertical concrete walls, and manually rewiring live electrical circuits, you must restore power to the sector and navigate your way to freedom.
+Your main tool is the power cable plugged into the top of your head. You can fling your plug across the room, hook into ceiling anchors to swing over spikes, climb up vertical walls, and jack into circuit dials to redirect electricity where it needs to go.
 
 ---
 
-## Core Mechanics & How It Plays
+## How It Plays
 
-### 1. High-Octane Pendulum Locomotion
-- **Aim & Launch**: Hold and release your mouse to aim a parabolic trajectory arc. Launch your plug into ceiling anchors, rotating circuit dials, or charging docks.
-- **Physics-Driven Swinging**: Build momentum with authentic pendulum physics. Pump your swing mid-air, reel in (`W`) to hoist yourself up, or reel out (`S`) to swing low over electrified floors.
-- **Tether Jumping**: Detach at the apex of your swing with `Space` to convert pure rotational velocity into an explosive directional launch across massive gaps.
-- **Vertical Wall Running**: Hit full sprint speed and run directly up vertical bulkheads to reach high platforms and hidden conduits.
+### Swinging and Moving Around
+You aim with your mouse, hold left click to see your throw arc, and release to shoot your plug. Once you are hooked into an anchor or a circuit dial, you can swing back and forth with real pendulum physics.
 
-### 2. Physical Circuit Rewiring & Logic Puzzles
-- **Hands-On Electrical Routing**: You are a walking conductor. Plug yourself directly into 32px cardinal junction dials to rotate circuit tracks (`E` or click).
-- **Logic Gates (AND & XOR)**: Solve real electrical networks. Route power through multi-input AND gates and exclusive XOR splitters to crack secure doors.
-- **Live Causal Hazards**: Direct cause-and-effect physics. Connecting live power energizes conduits and de-electrifies lethal shock barriers, opening clean pathways through hazardous corridors.
+While hanging in the air, you can reel your cable in with W or let it out with S to adjust your height. If you want to launch yourself across a wide gap, hit Space while swinging and your robot will leap forward, unplugging the cable mid flight. You can also run at full speed and jump into a wall to run straight up it.
 
-### 3. Battery Management
-- Every acrobatic leap, wall-run, tether jump, and circuit rotation draws on your onboard power cells.
-- Keep an eye on your battery gauge! Jack into active generators or wall chargers to restore your charge before your systems hit emergency shutoff.
+### Puzzles and Circuit Logic
+Each room is a puzzle. You will find rotating circuit dials on walls and ceilings. When you connect your plug to a dial, you can rotate it 90 degrees with E or by clicking it.
 
-### 4. Interactive Field Drones
-- Curious holographic drones hover throughout the sector. Click on them from any distance to receive tactical field intel, environmental analysis, and navigational tips.
+Power flows through these circuits into logic gates, like AND gates that need two inputs to turn on, and XOR gates that only activate with one single power line. When you route electricity to the right places, heavy blast doors will slide open and deadly electrified walls will turn off so you can pass safely.
+
+### Keeping Your Battery Charged
+Everything you do takes a little bit of power. Running, jumping, swinging, and turning heavy circuit dials slowly drains your battery bar at the top of the screen.
+
+To stay alive, you need to plug into active power circuits or wall chargers scattered around the levels. Once you plug in, your battery refills automatically.
+
+### Helpful Drones
+You will spot friendly little drones hovering in the rooms. Click on any drone at any time to open its screen and read quick tips about new mechanics.
 
 ---
 
 ## Controls
 
-*All keyboard controls can be fully customized and rebound in the **Options** menu.*
+You can customize all keyboard controls in the Options menu.
 
-| Action | Control | How to Use |
+| Action | Control | What it does |
 |---|---|---|
-| **Move Left / Right** | `A` / `D` | Smooth acceleration & ground traction |
-| **Sprint** | `Shift` + `A` / `D` | High-speed dash, required to initiate wall runs |
-| **Wall Run** | Sprint into wall + `Space` | Run vertically up walls to scale heights |
-| **Jump** | `Space` | Grounded jump with variable height & coyote time |
-| **Tether Jump** | `Space` *(mid-air swing)* | Leaps forward with momentum boost and unplugs cable |
-| **Aim & Launch Plug** | **Hold & Release LMB** | Draw trajectory arc; release to fire plug |
-| **Cut / Detach Wire** | **RMB** | Drops straight down without momentum boost |
-| **Reel In / Out** | `W` / `S` *(while swinging)* | Climb up or drop down along your tether |
-| **Rotate Circuit Dial** | `E` *(or Left Click dial)* | Rotates connected circuit junction 90° clockwise |
-| **Inspect Drone** | **Left Click** on drone | Opens field tutorial log from any distance |
-| **Pause / Back** | `Escape` | Opens pause menu or returns from settings |
+| Move Left and Right | A and D | Walk around |
+| Sprint | Shift + A or D | Run faster, needed for wall running |
+| Wall Run | Sprint into wall + Space | Run straight up a wall |
+| Jump | Space | Jump from the ground |
+| Tether Jump | Space while swinging | Leap forward and detach your cable |
+| Aim and Throw Plug | Hold and release Left Click | Aim your throw and launch the plug |
+| Drop Down | Right Click | Detach cable without jumping |
+| Reel Cable In and Out | W and S while swinging | Climb up or lower down |
+| Rotate Circuit Dial | E or Left Click dial | Turn connected circuit 90 degrees |
+| Read Drone Info | Left Click drone | Open drone tutorial screen |
+| Pause Game | Escape | Open the pause menu |
 
 ---
 
-## Architecture & Codebase
+## Project Structure and Architecture
 
-Built completely from scratch using vanilla HTML5 Canvas, modern ES6 modules, and an event-driven `EventBus` pub/sub pipeline without bloated third-party frameworks:
+The game runs on a custom engine built with vanilla HTML5 Canvas and JavaScript modules, using a simple event bus to let systems talk to each other without messy dependencies.
 
 ```
 src/
-|-- main.js                       # Game bootstrap, system registration, and loop coordination
+|-- main.js                       # Game setup and main game loop
 |-- core/
-|   |-- Engine.js                 # Deterministic 60Hz fixed-timestep accumulator with interpolation
-|   |-- EventBus.js               # Decoupled pub/sub messaging backbone
-|   |-- InputManager.js           # Action mapping, rebindable inputs, and mouse state
-|   |-- Camera.js                 # Smooth 2D tracking camera with room bounding
-|   |-- AssetLoader.js            # Asynchronous sprite sheets, audio, and LDtk JSON loader
-|   |-- AudioManager.js           # Multi-channel Web Audio sound player with volume busses
-|   `-- SaveManager.js            # LocalStorage game progress and room state persistence
+|   |-- Engine.js                 # 60 frames per second loop
+|   |-- EventBus.js               # Event bus for game wide events
+|   |-- InputManager.js           # Keyboard and mouse handling with remapping
+|   |-- Camera.js                 # Smooth camera that follows the player room by room
+|   |-- AssetLoader.js            # Loads images, audio files, and level data
+|   |-- AudioManager.js           # Sound effects and background music
+|   `-- SaveManager.js            # Saves checkpoint progress to localStorage
 |-- entities/
-|   |-- Player.js                 # Player state machine, kinematics, battery, and anchors
-|   |-- Drone.js                  # Interactive tutorial drone entities
+|   |-- Player.js                 # Robot physics, battery, and state
+|   |-- Drone.js                  # Tutorial drones
 |   `-- Socket.js                 # Anchor, circuit, and charger sockets
 |-- modules/
-|   |-- PlayerMovement.js         # Locomotion, wall running, gravity, collisions
-|   |-- WireSystem.js             # Parabolic aim trajectory, distance constraint, catenary curve
-|   |-- CircuitSystem.js          # Bitmask cardinal port routing, BFS power flow, XOR / AND gates
-|   |-- PipeSystem.js             # Energized electrical conduit rendering with animated pulses
-|   |-- HazardSystem.js           # Lethal electrical walls & direct physical causality
-|   `-- AnimationController.js    # Sprite animation sequencing
+|   |-- PlayerMovement.js         # Walking, jumping, wall running, and collisions
+|   |-- WireSystem.js             # Aiming, throwing, swinging physics, and cable rendering
+|   |-- CircuitSystem.js          # Circuit dials, power flow, and logic gates
+|   |-- PipeSystem.js             # Conduit pipes that light up with electricity
+|   |-- HazardSystem.js           # Electric hazard walls and doors
+|   `-- AnimationController.js    # Sprite animations
 |-- levels/
-|   |-- Level.js                  # Abstract level interface
-|   |-- LDtkLevel.js              # LDtk tilemap parser, entities loader, room transitions
-|   `-- TestRoom.js               # Standalone test sandbox
+|   |-- Level.js                  # Level interface
+|   |-- LDtkLevel.js              # LDtk tilemap loader and room setup
+|   `-- TestRoom.js               # Sandbox test room
 `-- ui/
-    |-- UIManager.js              # Central UI state machine (Main Menu, Playing, Paused, Options, Credits)
-    |-- UITheme.js                # Pixel-art 9-slice window frames, buttons, sliders, badges
-    |-- HUD.js                    # In-game battery meter and contextual prompts
-    |-- MainMenu.js               # Start screen with Start, Continue, Options, Credits
-    |-- PauseMenu.js              # In-game pause modal
-    |-- OptionsMenu.js            # Volume sliders, audio mute toggle, rebindable controls
-    `-- CreditsScreen.js          # Centered end-game & start menu credits modal with links
+    |-- UIManager.js              # Handles menus and screen states
+    |-- UITheme.js                # Pixel art frames, buttons, and sliders
+    |-- HUD.js                    # Battery meter and interaction hints
+    |-- MainMenu.js               # Title screen
+    |-- PauseMenu.js              # Pause menu
+    |-- OptionsMenu.js            # Volume controls and key rebinding
+    `-- CreditsScreen.js          # Credits screen
 ```
 
 ---
 
-## Running Locally
+## How to Play Locally
 
-Clone the repository and spin up any standard static HTTP server:
+To play the game on your computer, clone the repository and run any simple local web server:
 
 ```bash
 # Clone the repository
@@ -113,26 +109,26 @@ cd Kood-game-jam-2026
 # Option 1: Python 3
 python3 -m http.server 3000
 
-# Option 2: Node.js (npx serve)
+# Option 2: Node.js
 npx serve . -p 3000
 
-# Option 3: Included dev server
+# Option 3: Included python script
 python3 dev_server.py
 ```
 
-Then open `http://localhost:3000` in any modern web browser.
+Then visit `http://localhost:3000` in your web browser.
 
 ---
 
-## Assets & Credits
+## Credits
 
-- **Design, Programming, and Custom Art**: Mumen Osman ([mumen.dev](https://mumen.dev))
-- **Additional 2D Pixel Art, GUI, & Audio**: [CraftPix.net](https://craftpix.net)
-- **Built With**: Custom ES6 Canvas Engine, [LDtk](https://ldtk.io), and [Penpot](https://penpot.app)
-- **Source Code**: [https://github.com/MumenOsman/Kood-game-jam-2026](https://github.com/MumenOsman/Kood-game-jam-2026)
+- Design, Programming, and Custom Art: Mumen Osman ([mumen.dev](https://mumen.dev))
+- Additional 2D Pixel Art, GUI, and Audio: [CraftPix.net](https://craftpix.net)
+- Built With: Custom JavaScript engine, [LDtk](https://ldtk.io), and [Penpot](https://penpot.app)
+- Source Code: [https://github.com/MumenOsman/Kood-game-jam-2026](https://github.com/MumenOsman/Kood-game-jam-2026)
 
 ---
 
 ## License
 
-This project was created for the //kood Game Jam [Platformers] 2026. Custom code and level configurations are distributed under the MIT License. Embedded commercial art packs remain copyright their respective creators at CraftPix.net.
+Created for the //kood Game Jam [Platformers] 2026. Code and levels are under the MIT License. Art assets belong to CraftPix.net.
