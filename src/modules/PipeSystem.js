@@ -172,6 +172,15 @@ export class PipeSystem {
             grid.get(key).push(item);
         };
 
+        const getRoomIndex = (x, y) => {
+            if (!this.level || !this.level.rooms) return 0;
+            const rm = this.level.rooms.find(r => 
+                x >= r.worldX && x < r.worldX + r.pxWid &&
+                y >= r.worldY && y < r.worldY + r.pxHei
+            );
+            return rm ? rm.index : 0;
+        };
+
         // 1. Index all circuit dials first
         const dials = [];
         const dialGridKeys = new Set();
@@ -181,6 +190,7 @@ export class PipeSystem {
                 const gy = Math.round((node.y - 16) / 32);
                 node.gx = gx;
                 node.gy = gy;
+                node.roomIndex = getRoomIndex(node.x, node.y);
                 node.kind = 'DIAL';
                 node.isPowered = (node.type === 'SOURCE');
                 dials.push(node);
@@ -194,6 +204,7 @@ export class PipeSystem {
             if (dialGridKeys.has(`${p.gridX},${p.gridY}`)) continue;
             p.gx = p.gridX;
             p.gy = p.gridY;
+            p.roomIndex = getRoomIndex(p.x, p.y);
             p.kind = 'PIPE';
             p.isPowered = false;
             p.flowDir = { dx: 0, dy: 1 };
@@ -208,6 +219,7 @@ export class PipeSystem {
                 const gy = Math.round(g.y / 32);
                 g.gx = gx;
                 g.gy = gy;
+                g.roomIndex = getRoomIndex(g.x, g.y);
                 g.kind = 'GATE';
                 g.isPowered = false;
                 g.isConflict = false;
@@ -241,6 +253,7 @@ export class PipeSystem {
                 const sgy = Math.round(s.y / 32);
                 s.gx = sgx;
                 s.gy = sgy;
+                s.roomIndex = getRoomIndex(s.x, s.y);
                 s.kind = 'SOURCE';
                 s.isPowered = true;
                 s.ports = [true, true, true, true];
@@ -256,6 +269,7 @@ export class PipeSystem {
                 haz.kind = 'HAZARD';
                 haz.isPowered = false;
                 haz.ports = [true, true, true, true];
+                haz.roomIndex = getRoomIndex(haz.x, haz.y);
                 // Cover all grid tiles the hazard intersects
                 const minGx = Math.floor(haz.x / 32);
                 const maxGx = Math.floor((haz.x + haz.width - 1) / 32);
@@ -281,12 +295,14 @@ export class PipeSystem {
             const dgx = Math.round(door.x / 32);
             const dgy = Math.round(door.y / 32);
             const numTiles = Math.max(1, Math.round(door.height / 32));
+            const doorRoomIndex = getRoomIndex(door.x, door.y);
             for (let ty = 0; ty < numTiles; ty++) {
                 const doorTileObj = {
                     kind: 'DOOR',
                     raw: door,
                     gx: dgx,
                     gy: dgy + ty,
+                    roomIndex: doorRoomIndex,
                     isPowered: false,
                     ports: [true, true, true, true]
                 };
@@ -302,6 +318,7 @@ export class PipeSystem {
                 const bgy = Math.round(box.y / 32);
                 box.gx = bgx;
                 box.gy = bgy;
+                box.roomIndex = getRoomIndex(box.x, box.y);
                 box.kind = 'DEVICE';
                 box.isPowered = false;
                 box.ports = [true, true, true, true];
@@ -357,6 +374,11 @@ export class PipeSystem {
 
                     for (const neighbor of neighbors) {
                         if (neighbor === curr) continue;
+
+                        // Sector electrical isolation: prevent power from leaking across room boundaries
+                        if (curr.roomIndex !== undefined && neighbor.roomIndex !== undefined && curr.roomIndex !== neighbor.roomIndex) {
+                            continue;
+                        }
 
                         if (neighbor.kind === 'GATE') {
                             if (neighbor.inPorts.includes(opp)) {

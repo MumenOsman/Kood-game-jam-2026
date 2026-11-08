@@ -99,19 +99,30 @@ export class HazardSystem {
         const face = rawFace.toLowerCase();
         const isCorridorBeam = Boolean(col.isCorridorBeam) || 
                                face === 'beam' ||
-                               ((face === 'all' || face === 'all_sides') && col.width > col.height && col.width <= 128);
+                               ((face === 'all' || face === 'all_sides') && ((col.width > col.height && col.width <= 128) || (col.height > col.width && col.height <= 128)));
 
         if (isCorridorBeam) {
-            // Horizontal laser beam spanning across a corridor or shaft
-            const midY = col.y + col.height / 2;
-            const beamLeft = col.x;
-            const beamRight = col.x + col.width;
-            return (
-                pBounds.x < beamRight &&
-                pBounds.x + pBounds.width > beamLeft &&
-                pBounds.y < midY + 10 &&
-                pBounds.y + pBounds.height > midY - 10
-            );
+            if (col.height > col.width) {
+                // Vertical laser beam spanning across doorway or corridor
+                const midX = col.x + col.width / 2;
+                return (
+                    pBounds.x < midX + 10 &&
+                    pBounds.x + pBounds.width > midX - 10 &&
+                    pBounds.y < col.y + col.height &&
+                    pBounds.y + pBounds.height > col.y
+                );
+            } else {
+                // Horizontal laser beam spanning across a corridor or shaft
+                const midY = col.y + col.height / 2;
+                const beamLeft = col.x;
+                const beamRight = col.x + col.width;
+                return (
+                    pBounds.x < beamRight &&
+                    pBounds.x + pBounds.width > beamLeft &&
+                    pBounds.y < midY + 10 &&
+                    pBounds.y + pBounds.height > midY - 10
+                );
+            }
         }
 
         if (face === 'top' || face === 'up') {
