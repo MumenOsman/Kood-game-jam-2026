@@ -10,6 +10,10 @@
 		{
 			"levelIid": "a0b2c210-bde0-11f1-a2c7-d90d7af4319e",
 			"dir": "w"
+		},
+		{
+			"levelIid": "e58f0270-bde0-11f1-a2c7-b141eca096dd",
+			"dir": "e"
 		}
 	],
 	"customFields" : {},
@@ -19,6 +23,86 @@
 		"Pipes.png"
 	],
 	"entities": {
+		"Wall_run": [
+			{
+				"id": "Wall_run",
+				"iid": "048da990-bde0-11f1-a2c7-c3f28c116d22",
+				"layer": "Wall_run",
+				"x": 32,
+				"y": 64,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "06474070-bde0-11f1-a2c7-0f4315befe37",
+				"layer": "Wall_run",
+				"x": 128,
+				"y": 128,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "07fe1830-bde0-11f1-a2c7-7b4123d58a3a",
+				"layer": "Wall_run",
+				"x": 192,
+				"y": 128,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "09bcb820-bde0-11f1-a2c7-990e8ad59e03",
+				"layer": "Wall_run",
+				"x": 288,
+				"y": 64,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "0bbbbc70-bde0-11f1-a2c7-af70840d20d9",
+				"layer": "Wall_run",
+				"x": 448,
+				"y": 64,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "0ce71d10-bde0-11f1-a2c7-3596cc342c01",
+				"layer": "Wall_run",
+				"x": 544,
+				"y": 128,
+				"width": 32,
+				"height": 160,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
+			}
+		],
 		"Socket_Dial": [
 			{
 				"id": "Socket_Dial",

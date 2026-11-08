@@ -94,7 +94,7 @@ export class LDtkLevel extends Level {
             // 2. Load background image & room tile layers for all rooms
             this.backgroundImage = await this._loadRoomImage(this.bgPath);
 
-            const rawLevels = data.levels || [];
+            const rawLevels = (data.levels || []).filter(lvl => lvl.identifier !== 'Level_12');
             // Sort rooms in logical spatial progression order (worldX ascending, then bottom-to-top worldY descending)
             const levels = [...rawLevels].sort((a, b) => {
                 const ax = a.worldX !== undefined ? a.worldX : 0;
@@ -297,7 +297,14 @@ export class LDtkLevel extends Level {
                         assetLoader: this.assetLoader
                     }));
                 } else if (id === 'Socket_Dial') {
-                    const design = fields.Socket_Dial || 'T_SHAPE';
+                    let design = fields.Socket_Dial || 'T_SHAPE';
+                    if (lvl.identifier === 'Level_11') {
+                        const relGx = Math.round((ent.px[0] - (pivotX * w)) / 32);
+                        const relGy = Math.round((ent.px[1] - (pivotY * h)) / 32);
+                        if ((relGx === 1 && relGy === 5) || (relGx === 14 && relGy === 2)) {
+                            design = 'T_SHAPE';
+                        }
+                    }
                     const isSource = (design.toLowerCase() === 'source');
                     let rot = fields.initialRotation || 0;
                     // In And_gate_3, the 1-click bottom circuit dial starts horizontal (90 deg) so laser is active until clicked
@@ -406,10 +413,17 @@ export class LDtkLevel extends Level {
                     if (doorId === 'matrix_door') this.matrixDoor = targetDoor;
                 } else if (id === 'Logic_Gate') {
                     const rawGateType = fields.GateType || 'AND';
-                    const gateType = (rawGateType === 'OR') ? 'XOR' : rawGateType;
+                    let gateType = (rawGateType === 'OR') ? 'XOR' : rawGateType;
                     const orientation = fields.orientation || 0;
                     const relGx = Math.round((ent.px[0] - (pivotX * w)) / 32);
                     const relGy = Math.round((ent.px[1] - (pivotY * h)) / 32);
+                    if (lvl.identifier === 'Level_11') {
+                        if ((relGx === 4 && relGy === 1) || (relGx === 11 && relGy === 4) || (relGx === 11 && relGy === 2) || (relGx === 19 && relGy === 8)) {
+                            gateType = 'XOR';
+                        } else {
+                            gateType = 'AND';
+                        }
+                    }
                     let inPorts = fields.inPorts;
                     let outPorts = fields.outPorts;
                     if (!inPorts || !outPorts) {
@@ -472,6 +486,17 @@ export class LDtkLevel extends Level {
                     srcY: t.src[1],
                     tileId: t.t
                 });
+            }
+        }
+
+        if (lvl.identifier === 'Level_11') {
+            const p9_3 = this.pipes.find(p => p.x === worldX + 288 && p.y === worldY + 96);
+            if (!p9_3) {
+                this.pipes.push({ x: worldX + 288, y: worldY + 96, srcX: 96, srcY: 64, tileId: 11 });
+            }
+            const p9_5 = this.pipes.find(p => p.x === worldX + 288 && p.y === worldY + 160);
+            if (!p9_5) {
+                this.pipes.push({ x: worldX + 288, y: worldY + 160, srcX: 96, srcY: 64, tileId: 11 });
             }
         }
     }
