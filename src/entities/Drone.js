@@ -81,25 +81,31 @@ export class Drone {
             this.facing = pCenterX < centerX ? -1 : 1;
         }
 
-        // 4. Click detection to toggle tutorial window from any distance
+        // 4. Click detection to toggle tutorial window & auto-close on hover away
         const drawY = Math.round(this.y + this.hoverOffset);
         if (input) {
             const mx = input.mouseWorld.x;
             const my = input.mouseWorld.y;
             this.isHovered = (
-                mx >= this.x - 6 &&
-                mx <= this.x + this.width + 6 &&
-                my >= drawY - 6 &&
-                my <= drawY + this.height + 6
+                mx >= this.x - 8 &&
+                mx <= this.x + this.width + 8 &&
+                my >= drawY - 8 &&
+                my <= drawY + this.height + 8
             );
 
-            // Check if clicking open speech bubble to dismiss
-            let bubbleClicked = false;
-            if (this.isOpen && this._lastBubbleRect) {
-                const b = this._lastBubbleRect;
-                bubbleClicked = (mx >= b.x && mx <= b.x + b.width && my >= b.y && my <= b.y + b.height);
+            // Check if mouse is hovering over the open speech bubble
+            const b = this._lastBubbleRect;
+            const isBubbleHovered = Boolean(this.isOpen && b && (
+                mx >= b.x - 12 && mx <= b.x + b.width + 12 &&
+                my >= b.y - 12 && my <= b.y + b.height + 12
+            ));
+
+            // Auto-close when hovering mouse away (only opens on click, never on hover)
+            if (this.isOpen && !this.isHovered && !isBubbleHovered) {
+                this.isOpen = false;
             }
 
+            // Click handling
             if (input.leftPressedThisFrame) {
                 if (this.isHovered) {
                     this.isOpen = !this.isOpen;
@@ -108,7 +114,7 @@ export class Drone {
                         this.eventBus.emit('DRONE_OPENED', this.id);
                         this.eventBus.emit('DRONE_INTERACT', { isOpen: true, id: this.id });
                     }
-                } else if (bubbleClicked) {
+                } else if (isBubbleHovered) {
                     this.isOpen = false;
                 }
             }
@@ -223,21 +229,30 @@ export class Drone {
             if (curLine) lines.push(curLine);
         }
 
-        // Tokenize each line into buttons [SPACE], [A], etc. and plain text
+        // Tokenize each line into buttons [SPACE], gate names, hazard, and plain text
         const parsedLines = lines.map(line => {
             const tokens = [];
-            const regex = /(\[[^\]]+\])/g;
+            const regex = /(\[[^\]]+\]|\bAND GATE:?|\bXOR GATE:?|\bHAZARD:?)/g;
             let lastIndex = 0;
             let match;
             while ((match = regex.exec(line)) !== null) {
                 if (match.index > lastIndex) {
-                    tokens.push({ text: line.substring(lastIndex, match.index), isButton: false });
+                    tokens.push({ text: line.substring(lastIndex, match.index), type: 'text' });
                 }
-                tokens.push({ text: match[0], isButton: true });
+                const matchText = match[0];
+                let type = 'text';
+                if (matchText.startsWith('[')) {
+                    type = 'button';
+                } else if (matchText.startsWith('HAZARD')) {
+                    type = 'hazard';
+                } else if (matchText.includes('AND') || matchText.includes('XOR')) {
+                    type = 'gate';
+                }
+                tokens.push({ text: matchText, type });
                 lastIndex = regex.lastIndex;
             }
             if (lastIndex < line.length) {
-                tokens.push({ text: line.substring(lastIndex), isButton: false });
+                tokens.push({ text: line.substring(lastIndex), type: 'text' });
             }
 
             let lineWidth = 0;
@@ -321,8 +336,16 @@ export class Drone {
                 ctx.fillStyle = '#05070a';
                 ctx.fillText(token.text, currentX + 1, lineY + 1);
 
-                // Front text: yellow for [buttons], off-white for regular text
-                ctx.fillStyle = token.isButton ? '#f4b03c' : '#dce5f0';
+                // Front text: vivid yellow for logic gates, red for hazards, amber for [buttons], off-white for regular text
+                let textColor = '#dce5f0';
+                if (token.type === 'button') {
+                    textColor = '#f4b03c'; // Warm amber
+                } else if (token.type === 'gate') {
+                    textColor = '#fde047'; // Vivid yellow for gate names
+                } else if (token.type === 'hazard') {
+                    textColor = '#ef4444'; // Red for hazard
+                }
+                ctx.fillStyle = textColor;
                 ctx.fillText(token.text, currentX, lineY);
 
                 currentX += token.width;

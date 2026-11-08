@@ -317,11 +317,14 @@ export class LDtkLevel extends Level {
                         });
                     }
 
-                    const sock = new Socket(`dial_sock_${centerX}_${centerY}`, centerX, centerY, 'CIRCUIT', {
-                        label: design,
-                        assetLoader: this.assetLoader
-                    });
-                    this.addSocket(sock);
+                    let sock = null;
+                    if (!isSource) {
+                        sock = new Socket(`dial_sock_${centerX}_${centerY}`, centerX, centerY, 'CIRCUIT', {
+                            label: design,
+                            assetLoader: this.assetLoader
+                        });
+                        this.addSocket(sock);
+                    }
 
                     if (this.circuitSystem) {
                         const targetDev = (Math.round(centerX) === 1488 || Math.round(topLeftX) === 1488)
@@ -338,7 +341,9 @@ export class LDtkLevel extends Level {
                             targetRotationAngle: initialAngle,
                             deviceId: targetDev
                         });
-                        sock.circuitNodeId = `dial_node_${centerX}_${centerY}`;
+                        if (sock) {
+                            sock.circuitNodeId = `dial_node_${centerX}_${centerY}`;
+                        }
                     }
                 } else if (id === 'Wall_run') {
                     const face = (fields.Face || 'BOTH').toLowerCase();
@@ -488,8 +493,14 @@ export class LDtkLevel extends Level {
     _getDroneMessage(roomIndex, x, type, context = null) {
         if (context) {
             const ctxKey = String(context).toLowerCase().trim();
+            if (ctxKey.includes('hang and turn') || ctxKey.includes('hang & turn')) {
+                return '[SPACE] then [LMB] to hang and rotate\nSolve puzzle to open door';
+            }
+            if (ctxKey.includes('hang and move') || ctxKey.includes('circuits to hang') || ctxKey.includes('hang and swing')) {
+                return 'Jump, hang, rotate and swing!';
+            }
             if (ctxKey.includes('hang') || ctxKey.includes('circuits')) {
-                return '[LMB] = Wire To Circuit Dials\nHang and swing!';
+                return 'Jump, hang, rotate and swing!';
             }
             if (ctxKey.includes('xor') || ctxKey.includes('or gate')) {
                 return 'XOR GATE:\nActive on 1 input\nConflict on 2 inputs';
@@ -497,8 +508,8 @@ export class LDtkLevel extends Level {
             if (ctxKey.includes('and gate')) {
                 return 'AND GATE:\nRequires BOTH inputs ON';
             }
-            if (ctxKey.includes('laser') || ctxKey.includes('electrified')) {
-                return 'HAZARD WARNING:\nSever circuit to cut laser';
+            if (ctxKey.includes('laser') || ctxKey.includes('electrified') || ctxKey.includes('hazard')) {
+                return 'HAZARD:\nSever circuit to cut laser';
             }
             if (ctxKey.includes('turning') || ctxKey.includes('socket') || ctxKey.includes('dial') || ctxKey.includes('door') || ctxKey.includes('puzzle') || ctxKey.includes('rotation')) {
                 return '[LMB] = Connect Wire\n[E] = Rotate Junction\nSolve puzzle to open door';
@@ -1407,28 +1418,28 @@ export class LDtkLevel extends Level {
                 const rx = haz.x - room.worldX;
                 const ry = haz.y - room.worldY;
                 if (room.id === 'And_gate_3') {
-                    if (rx === 224 && ry === 32) {
-                        // Wall laser on left wall -> lightbox at [208, 144]
-                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 208 && (bx.y - room.worldY) === 144);
+                    if (rx < 300) {
+                        // Left wall laser -> lightbox at rx < 300
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) < 300);
                         if (b) haz.cutoffBoxId = b.id;
-                    } else if (rx === 512 && ry === 160) {
-                        // Lower laser in shaft -> lightbox at [496, 176]
-                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 496 && (bx.y - room.worldY) === 176);
+                    } else if (ry >= 100) {
+                        // Lower laser in shaft -> lower shaft lightbox
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) >= 300 && (bx.y - room.worldY) >= 100);
                         if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
-                    } else if (rx === 512 && ry === 32) {
-                        // Upper laser in shaft -> lightbox at [592, 48]
-                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 592 && (bx.y - room.worldY) === 48);
+                    } else {
+                        // Upper laser in shaft -> upper shaft lightbox
+                        const b = roomBoxes.find(bx => (bx.x - room.worldX) >= 300 && (bx.y - room.worldY) < 100);
                         if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
                     }
                 } else if (room.id === 'And_gate_3_above') {
-                    if (rx === 32 && ry === 224) {
-                        // Lower hazard -> lightbox at [112, 240]
-                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 112 && (bx.y - room.worldY) === 240);
-                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
-                    } else if (rx === 288 && ry === 192) {
-                        // Upper walkway laser -> door lightbox at [592, 80]
-                        const b = roomBoxes.find(bx => (bx.x - room.worldX) === 592 && (bx.y - room.worldY) === 80);
-                        if (b) { haz.cutoffBoxId = b.id; haz.isCorridorBeam = true; }
+                    const lowerBox = roomBoxes.find(bx => (bx.y - room.worldY) > 150);
+                    const upperBox = roomBoxes.find(bx => (bx.y - room.worldY) < 150);
+                    if (rx < 150) {
+                        // Left wall laser -> lower puzzle on the left
+                        if (lowerBox) { haz.cutoffBoxId = lowerBox.id; haz.isCorridorBeam = true; }
+                    } else {
+                        // Upper walkway laser -> linked with the gate and puzzle above
+                        if (upperBox) { haz.cutoffBoxId = upperBox.id; haz.isCorridorBeam = true; }
                     }
                 }
 

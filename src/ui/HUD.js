@@ -46,9 +46,6 @@ export class HUD {
         // 1. Battery Gauge (Top-Left)
         this._renderBatteryGauge(ctx);
 
-        // 2. Contextual Prompt near Player
-        this._renderContextPrompt(ctx);
-
         ctx.restore();
     }
 

@@ -92,6 +92,19 @@
 				"customFields": {
 					"Face": "BOTH"
 				}
+			},
+			{
+				"id": "Wall_run",
+				"iid": "c1a0b5d0-bde0-11f1-a2c7-67035cb014dd",
+				"layer": "Wall_run",
+				"x": 256,
+				"y": 160,
+				"width": 32,
+				"height": 64,
+				"color": 58879,
+				"customFields": {
+					"Face": "BOTH"
+				}
 			}
 		],
 		"Power_source": [

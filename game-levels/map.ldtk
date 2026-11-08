@@ -5127,6 +5127,22 @@
 							"fieldInstances": [{ "__identifier": "Face", "__type": "LocalEnum.Face", "__value": "BOTH", "__tile": null, "defUid": 67, "realEditorValues": [] }],
 							"__worldX": 5696,
 							"__worldY": -160
+						},
+						{
+							"__identifier": "Wall_run",
+							"__grid": [8,5],
+							"__pivot": [0,0],
+							"__tags": ["geometry"],
+							"__tile": null,
+							"__smartColor": "#00E5FF",
+							"iid": "c1a0b5d0-bde0-11f1-a2c7-67035cb014dd",
+							"width": 32,
+							"height": 64,
+							"defUid": 65,
+							"px": [256,160],
+							"fieldInstances": [{ "__identifier": "Face", "__type": "LocalEnum.Face", "__value": "BOTH", "__tile": null, "defUid": 67, "realEditorValues": [] }],
+							"__worldX": 5376,
+							"__worldY": -160
 						}
 					]
 				},
@@ -5855,7 +5871,7 @@
 					"layerDefUid": 89,
 					"pxOffsetX": 0,
 					"pxOffsetY": 0,
-					"visible": false,
+					"visible": true,
 					"optionalRules": [],
 					"intGridCsv": [],
 					"autoLayerTiles": [],
