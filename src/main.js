@@ -336,6 +336,7 @@ async function bootstrap() {
         onComplete: () => {
             isGameCompleted = true;
             saveManager.markLevelCompleted(11); // Mark Sector 12 complete
+            saveManager.markLevelCompleted(12); // Mark Secret Credits Flight Level complete
             saveManager.clearSave();
             wireSystem.disconnectWire();
             level.activeRoomIndex = 0;

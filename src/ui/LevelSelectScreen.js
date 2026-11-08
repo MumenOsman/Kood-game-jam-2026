@@ -37,9 +37,13 @@ export class LevelSelectScreen {
     _getLayoutBounds() {
         const cx = 1280 / 2;
         const frameW = 660;
-        const frameH = 470;
+
+        const completedLevels = this.saveManager ? this.saveManager.getCompletedLevels() : [];
+        const isCreditCompleted = completedLevels.includes(12);
+
+        const frameH = isCreditCompleted ? 530 : 470;
         const fx = cx - frameW / 2;
-        const fy = (720 - frameH) / 2;
+        const fy = Math.round((720 - frameH) / 2);
 
         const btnW = 250;
         const btnH = 38;
@@ -49,8 +53,6 @@ export class LevelSelectScreen {
 
         const col0_X = fx + 65;
         const col1_X = col0_X + btnW + colGap;
-
-        const completedLevels = this.saveManager ? this.saveManager.getCompletedLevels() : [];
 
         const sectorButtons = this.sectors.map((sec) => {
             const isCol1 = sec.index >= 6;
@@ -71,6 +73,21 @@ export class LevelSelectScreen {
             };
         });
 
+        let btnCredit = null;
+        if (isCreditCompleted) {
+            btnCredit = {
+                id: 'sector_12',
+                index: 12,
+                text: '★ CREDITS FLIGHT ★',
+                x: cx - btnW / 2,
+                y: fy + 382,
+                width: btnW,
+                height: btnH,
+                isCompleted: true,
+                isSpecial: true
+            };
+        }
+
         const btnBack = {
             id: 'btn_back',
             text: 'BACK',
@@ -86,6 +103,7 @@ export class LevelSelectScreen {
             frameW,
             frameH,
             sectorButtons,
+            btnCredit,
             btnBack
         };
     }
@@ -111,6 +129,14 @@ export class LevelSelectScreen {
         const b = bounds.btnBack;
         if (mx >= b.x && mx <= b.x + b.width && my >= b.y && my <= b.y + b.height) {
             this.hoveredBtn = b.id;
+        }
+
+        // Check Secret Flight Credits button
+        if (bounds.btnCredit) {
+            const cb = bounds.btnCredit;
+            if (mx >= cb.x && mx <= cb.x + cb.width && my >= cb.y && my <= cb.y + cb.height) {
+                this.hoveredBtn = cb.id;
+            }
         }
 
         // Play audio hover
@@ -164,6 +190,18 @@ export class LevelSelectScreen {
             const variant = btn.isCompleted ? (isHover ? 'amber' : 'slate') : 'slate';
 
             this.theme.drawButton(ctx, btn, btn.text, state, variant);
+        }
+
+        // 4b. Golden Secret Credit Level Button (Centered horizontally below sector grid)
+        if (bounds.btnCredit) {
+            const isCreditHover = this.hoveredBtn === bounds.btnCredit.id;
+            this.theme.drawButton(
+                ctx,
+                bounds.btnCredit,
+                bounds.btnCredit.text,
+                isCreditHover ? 'hover' : 'normal',
+                'amber'
+            );
         }
 
         // 5. Back Button

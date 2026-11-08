@@ -888,6 +888,11 @@ export class LDtkLevel extends Level {
                 g.isConflict = false;
             }
         }
+
+        // Reset spaceship boarding state
+        if (this.spaceship && (roomIndex === 12 || roomIndex === this.totalRooms - 1)) {
+            this.spaceship.isBoarded = false;
+        }
     }
 
     /**
@@ -896,6 +901,10 @@ export class LDtkLevel extends Level {
     resetAllCircuits() {
         if (this.circuitSystem && typeof this.circuitSystem.resetAllNodes === 'function') {
             this.circuitSystem.resetAllNodes();
+        }
+
+        if (this.spaceship) {
+            this.spaceship.isBoarded = false;
         }
 
         for (const d of (this.doors || [])) {
