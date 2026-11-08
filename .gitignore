@@ -15,4 +15,5 @@ __pycache__/
 
 # Archives
 *.zip
+!TetherMind.zip
 
