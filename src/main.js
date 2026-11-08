@@ -22,7 +22,7 @@ import { HUD } from './ui/HUD.js?v=20261108_v15';
 import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
 import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
 import { UIManager } from './ui/UIManager.js?v=20261108_v13';
-import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v29';
+import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v30';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');

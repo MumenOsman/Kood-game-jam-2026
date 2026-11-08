@@ -246,10 +246,10 @@ export class CreditFlightScene {
 
     _transitionToFlightRunner() {
         this.state = FLIGHT_STATE.FLIGHT_RUNNER;
-        // Transition to screen coordinates (1280x720)
+        // Transition to screen coordinates (1280x720) with vehicle centered
         this.width = 180;
         this.height = 88;
-        this.x = 160;
+        this.x = (this.screenWidth - this.width) / 2;
         this.y = 320;
         this.vx = 0;
         this.vy = 0;
@@ -265,45 +265,50 @@ export class CreditFlightScene {
     }
 
     _updateFlightRunner(dt, input) {
-        // 1. Full Canvas WASD Steering
-        const speed = 420;
-        let inputX = 0;
-        let inputY = 0;
+        let isRight = false;
         let isLeft = false;
+        let isUp = false;
+        let isDown = false;
 
         if (input) {
-            const isRight = input.isKeyDown ? (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) : false;
+            isRight = input.isKeyDown ? (input.isKeyDown('KeyD') || input.isKeyDown('ArrowRight')) : false;
             isLeft = input.isKeyDown ? (input.isKeyDown('KeyA') || input.isKeyDown('ArrowLeft')) : false;
-            const isUp = input.isKeyDown ? (input.isKeyDown('KeyW') || input.isKeyDown('ArrowUp')) : false;
-            const isDown = input.isKeyDown ? (input.isKeyDown('KeyS') || input.isKeyDown('ArrowDown')) : false;
-
-            if (isRight) inputX += 1;
-            if (isLeft) inputX -= 1;
-            if (isUp) inputY -= 1;
-            if (isDown) inputY += 1;
+            isUp = input.isKeyDown ? (input.isKeyDown('KeyW') || input.isKeyDown('ArrowUp')) : false;
+            isDown = input.isKeyDown ? (input.isKeyDown('KeyS') || input.isKeyDown('ArrowDown')) : false;
         }
 
-        // When vehicle is moving backward (A / ArrowLeft), slow down animation to ~32% speed (never stops completely)
-        const targetTimeScale = isLeft ? 0.32 : 1.0;
+        // [A] / [ArrowLeft] decelerates / slows down animations (~32% speed, never stops completely)
+        // [D] / [ArrowRight] accelerates / fast-forwards animations (~185% speed)
+        let targetTimeScale = 1.0;
+        if (isLeft && !isRight) {
+            targetTimeScale = 0.32;
+        } else if (isRight && !isLeft) {
+            targetTimeScale = 1.85;
+        }
         this.timeScale += (targetTimeScale - this.timeScale) * Math.min(1, dt * 7.0);
 
-        // 2. Parallax Background Scrolling (affected by dynamic timeScale)
+        // 1. Continuous Parallax Background Scrolling (affected by dynamic timeScale)
         this.bgScrollX = (this.bgScrollX + this.bgSpeed * this.timeScale * dt) % this.screenWidth;
 
-        this.vx += (inputX * speed - this.vx) * Math.min(1, dt * 5);
-        this.vy += (inputY * speed - this.vy) * Math.min(1, dt * 5);
+        // 2. Keep Vehicle Centered Horizontally
+        const targetCenterX = (this.screenWidth - this.width) / 2;
+        this.x += (targetCenterX - this.x) * Math.min(1, dt * 8);
 
-        this.x += this.vx * dt;
+        // 3. Vertical Steering via [W] / [S] or [ArrowUp] / [ArrowDown]
+        const speedY = 420;
+        let inputY = 0;
+        if (isUp) inputY -= 1;
+        if (isDown) inputY += 1;
+
+        this.vy += (inputY * speedY - this.vy) * Math.min(1, dt * 5);
         this.y += this.vy * dt;
 
-        // Screen boundary clamping
-        const marginX = 60;
+        // Screen boundary clamping vertically
         const marginY = 50;
-        this.x = Math.max(marginX, Math.min(this.screenWidth - this.width - marginX, this.x));
         this.y = Math.max(marginY, Math.min(this.screenHeight - this.height - marginY, this.y));
 
         // Smooth banking tilt
-        const targetTilt = (this.vy / speed) * 0.14; // +/- 8 degrees
+        const targetTilt = (this.vy / speedY) * 0.14; // +/- 8 degrees
         this.tiltAngle += (targetTilt - this.tiltAngle) * Math.min(1, dt * 6);
 
         // 3. Spawning Credit Obstacles:
@@ -510,11 +515,11 @@ export class CreditFlightScene {
             ctx.drawImage(shipImg, -this.width / 2, -this.height / 2, this.width, this.height);
         }
 
-        // Rear Thruster (Boosted size during flight)
+        // Rear Thruster (Boosts size during forward acceleration, reduces during slow-down)
         const thrustImg = this.assetLoader ? this.assetLoader.getImage(`thrust_back${this.thrustFrame + 1}`) : null;
         if (thrustImg && thrustImg.complete) {
-            const tw = 28;
-            const th = 40;
+            const tw = this.timeScale > 1.2 ? 38 : (this.timeScale < 0.6 ? 22 : 28);
+            const th = this.timeScale > 1.2 ? 46 : (this.timeScale < 0.6 ? 32 : 40);
             const tx = -this.width / 2 - tw + 6;
             const ty = -th / 2 + 6;
             ctx.drawImage(thrustImg, tx, ty, tw, th);
