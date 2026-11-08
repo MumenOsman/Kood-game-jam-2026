@@ -58,29 +58,37 @@ export class CreditFlightScene {
         this.screenShake = 0;
         this.hitCooldown = 0;
 
-        // Credits Sequence Definition (max 3 words per obstacle, or title)
+        // Credits Sequence Definition (Sequential narrative flight cards)
         this.creditList = [
-            { text: 'HEY!', isTitle: true },
-            { text: 'THANKS FOR PLAYING', isTitle: false },
-            { text: 'THIS GAME...', isTitle: false },
-            { text: 'WAS MADE FOR...', isTitle: false },
-            { text: 'KOOD JAM [Platformers]', isTitle: true },
-            { text: 'SOLO DEVELOPED BY:', isTitle: false },
-            { text: 'MUMEN OSMAN', isTitle: true },
-            { text: 'MUMEN.DEV', isTitle: false },
-            { text: 'DESIGN & CODE', isTitle: false },
-            { text: 'CUSTOM PIXEL ART', isTitle: false },
-            { text: 'CRAFTPIX.NET ASSETS', isTitle: false },
-            { text: 'CUSTOM ENGINE', isTitle: false },
-            { text: 'MADE WITH LDTK', isTitle: false },
-            { text: 'YOU ARE AWESOME!', isTitle: true },
-            { text: 'MISSION COMPLETE', isTitle: true }
+            { text: 'Hey!', isTitle: true },
+            { text: 'You have reached...', isTitle: false },
+            { text: 'A secret level!', isTitle: true },
+            { text: 'You finished the...', isTitle: false },
+            { text: 'Hard stuff', isTitle: true },
+            { text: 'And now...', isTitle: false },
+            { text: 'I want to say...', isTitle: false },
+            { text: 'Thank you!', isTitle: true },
+            { text: 'You are awesome!', isTitle: true },
+            { text: 'Before I forget...', isTitle: false },
+            { text: 'I think I should...', isTitle: false },
+            { text: 'Tell you that...', isTitle: false },
+            { text: 'This game...', isTitle: false },
+            { text: 'was made for...', isTitle: false },
+            { text: 'Kood Jam [Platformers]', isTitle: true },
+            { text: 'It was handcrafted by...', isTitle: false },
+            {
+                lines: ['Mumen Osman', 'mumen.dev'],
+                isTitle: true
+            },
+            { text: 'featuring CRAFTPIX.com', isTitle: false },
+            { text: 'Thats it...', isTitle: false },
+            { text: 'Bye!', isTitle: true }
         ];
 
         this.activeObstacles = [];
         this.spawnIndex = 0;
-        this.spawnTimer = 1.2; // initial delay before first obstacle
-        this.spawnInterval = 2.6; // seconds between obstacles
+        this.spawnTimer = 1.0; // initial delay before first obstacle
+        this.spawnInterval = 0.8; // pause between boards after previous one exits
 
         // Hyperdrive exit state
         this.hyperdriveTimer = 0;
@@ -298,12 +306,20 @@ export class CreditFlightScene {
         const targetTilt = (this.vy / speed) * 0.14; // +/- 8 degrees
         this.tiltAngle += (targetTilt - this.tiltAngle) * Math.min(1, dt * 6);
 
-        // 3. Spawning Credit Obstacles (scaled with timeScale so pacing remains balanced)
-        this.spawnTimer -= this.timeScale * dt;
-        if (this.spawnTimer <= 0 && this.spawnIndex < this.creditList.length) {
-            this._spawnObstacle(this.creditList[this.spawnIndex]);
-            this.spawnIndex++;
-            this.spawnTimer = this.spawnInterval;
+        // 3. Spawning Credit Obstacles:
+        // Strictly enforce that NO TWO BOARDS EVER APPEAR ON SCREEN TOGETHER.
+        // Wait until all active boards have completely scrolled off the screen on the left
+        // before starting the countdown for the next board.
+        const anyBoardOnScreen = this.activeObstacles.some(obs => obs.x + obs.width > -40);
+        if (anyBoardOnScreen) {
+            this.spawnTimer = this.spawnInterval; // Keep countdown ready until screen clears
+        } else {
+            this.spawnTimer -= this.timeScale * dt;
+            if (this.spawnTimer <= 0 && this.spawnIndex < this.creditList.length) {
+                this._spawnObstacle(this.creditList[this.spawnIndex]);
+                this.spawnIndex++;
+                this.spawnTimer = this.spawnInterval;
+            }
         }
 
         // 4. Update Active Obstacles & Collision Check
@@ -340,17 +356,21 @@ export class CreditFlightScene {
     }
 
     _spawnObstacle(creditItem) {
-        // Generous obstacle frame width & height for comfortable reading
-        const baseW = Math.max(300, Math.min(520, creditItem.text.length * 19 + 70));
-        const baseH = creditItem.isTitle ? 92 : 80;
+        const lines = creditItem.lines || [creditItem.text];
+        const longestLine = lines.reduce((max, l) => Math.max(max, l.length), 0);
+
+        // Generous obstacle board dimensions for maximum clarity and bold pixel presence
+        const baseW = Math.max(380, Math.min(680, longestLine * 23 + 100));
+        const baseH = lines.length > 1 ? 144 : (creditItem.isTitle ? 112 : 98);
 
         // Randomized vertical position in reachable flight zone
-        const minY = 70;
-        const maxY = this.screenHeight - baseH - 70;
+        const minY = 65;
+        const maxY = this.screenHeight - baseH - 65;
         const spawnY = Math.round(minY + Math.random() * (maxY - minY));
 
         this.activeObstacles.push({
-            text: creditItem.text,
+            lines,
+            text: lines.join(' '),
             isTitle: creditItem.isTitle,
             x: this.screenWidth + 40,
             y: spawnY,
@@ -554,19 +574,41 @@ export class CreditFlightScene {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const fontSize = obs.isTitle ? '22px' : '18px';
-        ctx.font = `bold ${fontSize} 'CyberpunkPixel', 'Courier New', monospace`;
-
+        const lines = obs.lines || [obs.text];
         const textX = ox + ow / 2;
-        const textY = oy + oh / 2;
 
-        // Razor-sharp drop shadow
-        ctx.fillStyle = '#000000';
-        ctx.fillText(obs.text, textX + 2, textY + 2);
+        if (lines.length > 1) {
+            // Multiline layout (e.g. Mumen Osman / mumen.dev on the same board)
+            const lineSpacing = 38;
+            const startY = oy + oh / 2 - ((lines.length - 1) * lineSpacing) / 2;
 
-        // Foreground text (golden for titles, crisp white for body)
-        ctx.fillStyle = obs.isTitle ? '#f4b03c' : '#ffffff';
-        ctx.fillText(obs.text, textX, textY);
+            lines.forEach((line, idx) => {
+                const lineY = Math.round(startY + idx * lineSpacing);
+                const fontSize = idx === 0 ? '24px' : '18px';
+                ctx.font = `bold ${fontSize} 'CyberpunkPixel', 'Courier New', monospace`;
+
+                // Razor-sharp drop shadow
+                ctx.fillStyle = '#000000';
+                ctx.fillText(line, textX + 2, lineY + 2);
+
+                // Foreground text
+                ctx.fillStyle = idx === 0 ? '#f4b03c' : '#7dd3fc';
+                ctx.fillText(line, textX, lineY);
+            });
+        } else {
+            // Single line layout
+            const fontSize = obs.isTitle ? '24px' : '20px';
+            ctx.font = `bold ${fontSize} 'CyberpunkPixel', 'Courier New', monospace`;
+            const textY = Math.round(oy + oh / 2);
+
+            // Razor-sharp drop shadow
+            ctx.fillStyle = '#000000';
+            ctx.fillText(lines[0], textX + 2, textY + 2);
+
+            // Foreground text (golden for titles, crisp white for body)
+            ctx.fillStyle = obs.isTitle ? '#f4b03c' : '#ffffff';
+            ctx.fillText(lines[0], textX, textY);
+        }
 
         ctx.restore();
     }
