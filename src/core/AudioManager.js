@@ -15,9 +15,9 @@ export class AudioManager {
 
         // Tracks definition
         this.musicSources = {
-            main_menu: './assets/audio/music/main_menu.mp3?v=20261108_v32',
-            game_levels: './assets/audio/music/game_levels.mp3?v=20261108_v32',
-            special_level: './assets/audio/music/warped_vehicles.mp3'
+            main_menu: './assets/audio/music/main_menu.mp3?v=20261108_v34',
+            game_levels: './assets/audio/music/game_levels.mp3?v=20261108_v34',
+            special_level: './assets/audio/music/warped_vehicles.mp3?v=20261108_v34'
         };
 
         this.fxSources = {
@@ -47,7 +47,7 @@ export class AudioManager {
             // Energy, Hazards & World
             laser_zap: './assets/audio/sfx/laser_zap.mp3',
             player_respawn: './assets/audio/sfx/player_respawn.mp3',
-            player_charge: './assets/audio/sfx/player_charge.mp3?v=20261108_v32',
+            player_charge: './assets/audio/sfx/player_charge.mp3?v=20261108_v34',
             room_transition: './assets/audio/sfx/room_transition.mp3',
             access_granted: './assets/audio/sfx/access_granted.mp3',
             access_denied: './assets/audio/sfx/access_denied.mp3'
