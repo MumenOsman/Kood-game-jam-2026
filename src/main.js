@@ -3,27 +3,39 @@
  * Bootstrap entry point: initializes core systems, loads assets,
  * registers modular systems with Engine and EventBus, and starts loop.
  */
-import { EventBus } from './core/EventBus.js?v=20261107_v7';
-import { Engine } from './core/Engine.js?v=20261107_v7';
-import { InputManager } from './core/InputManager.js?v=20261107_v7';
-import { Camera } from './core/Camera.js?v=20261107_v7';
-import { AssetLoader } from './core/AssetLoader.js?v=20261107_v7';
+import { EventBus } from './core/EventBus.js?v=20261107_v18';
+import { Engine } from './core/Engine.js?v=20261107_v18';
+import { InputManager } from './core/InputManager.js?v=20261107_v18';
+import { Camera } from './core/Camera.js?v=20261107_v18';
+import { AssetLoader } from './core/AssetLoader.js?v=20261107_v18';
 
-import { Player } from './entities/Player.js?v=20261107_v7';
-import { PlayerMovement } from './modules/PlayerMovement.js?v=20261107_v7';
-import { WireSystem } from './modules/WireSystem.js?v=20261107_v7';
-import { CircuitSystem } from './modules/CircuitSystem.js?v=20261107_v7';
-import { PipeSystem } from './modules/PipeSystem.js?v=20261107_v7';
-import { HazardSystem } from './modules/HazardSystem.js?v=20261107_v7';
-import { AnimationController } from './modules/AnimationController.js?v=20261107_v7';
-import { TestRoom } from './levels/TestRoom.js?v=20261107_v7';
-import { LDtkLevel } from './levels/LDtkLevel.js?v=20261107_v7';
-import { HUD } from './ui/HUD.js?v=20261107_v7';
+import { Player } from './entities/Player.js?v=20261108_v2';
+import { PlayerMovement } from './modules/PlayerMovement.js?v=20261108_v2';
+import { WireSystem } from './modules/WireSystem.js?v=20261108_v2';
+import { CircuitSystem } from './modules/CircuitSystem.js?v=20261108_v2';
+import { PipeSystem } from './modules/PipeSystem.js?v=20261108_v2';
+import { HazardSystem } from './modules/HazardSystem.js?v=20261108_v2';
+import { AnimationController } from './modules/AnimationController.js?v=20261108_v2';
+import { TestRoom } from './levels/TestRoom.js?v=20261108_v2';
+import { LDtkLevel } from './levels/LDtkLevel.js?v=20261108_v2';
+import { HUD } from './ui/HUD.js?v=20261108_v2';
+import { AudioManager } from './core/AudioManager.js?v=20261108_v2';
+import { SaveManager } from './core/SaveManager.js?v=20261108_v2';
+import { UIManager } from './ui/UIManager.js?v=20261108_v2';
 
 async function bootstrap() {
     const canvas = document.getElementById('gameCanvas');
     canvas.width = 1280;
     canvas.height = 720;
+
+    // Load pixel font via FontFace API
+    try {
+        const pixelFont = new FontFace('CyberpunkPixel', 'url(./assets/ui/font/CyberpunkCraftpixPixel.otf)');
+        await pixelFont.load();
+        document.fonts.add(pixelFont);
+    } catch (e) {
+        console.warn('[Font] Failed to load CyberpunkPixel via FontFace:', e);
+    }
 
     // 1. Core Services
     const eventBus = new EventBus();
@@ -31,6 +43,9 @@ async function bootstrap() {
     const camera = new Camera(canvas.width, canvas.height);
     const input = new InputManager(canvas, camera);
     const engine = new Engine(canvas);
+    const audioManager = new AudioManager();
+    const saveManager = new SaveManager();
+    audioManager.attachEventBus(eventBus);
 
     // 2. Load Assets (spritesheet and bounds metadata)
     await Promise.all([
@@ -39,13 +54,19 @@ async function bootstrap() {
         assetLoader.loadImage('drones_sheet', './assets/sprites/drones.png?v=20261107_v7'),
         assetLoader.loadImage('circuits_sheet', './assets/sprites/circuits.png?v=20261107_v7'),
         assetLoader.loadImage('gates_sheet', './assets/sprites/gates.png?v=20261107_v7'),
-        assetLoader.loadImage('objects_sheet', './assets/sprites/objects.png?v=20261107_v7')
+        assetLoader.loadImage('objects_sheet', './assets/sprites/objects.png?v=20261107_v7'),
+        assetLoader.loadImage('ui_frame_map', './assets/ui/frames/FrameMap.png?v=20261107_v1'),
+        assetLoader.loadImage('ui_btn_10', './assets/ui/buttons/ButtonMap10.png?v=20261107_v1'),
+        assetLoader.loadImage('ui_btn_5', './assets/ui/buttons/ButtonMap5.png?v=20261107_v1'),
+        assetLoader.loadImage('ui_slider', './assets/ui/bars/Scrolling1.png?v=20261107_v1')
     ]);
 
     // 3. Entity & Level Setup
-    const levelQuery = typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search).get('level')
+    const urlParams = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search)
         : null;
+    const levelQuery = urlParams ? urlParams.get('level') : null;
+    const roomQuery = urlParams ? urlParams.get('room') : null;
 
     let level = null;
     const circuitSystem = new CircuitSystem(eventBus, input, null, { assetLoader });
@@ -61,11 +82,27 @@ async function bootstrap() {
         });
         await ldtkLevel.load();
         level = ldtkLevel;
-        camera.setRoomMode(level.roomWidth, level.roomHeight, level.totalRooms);
+        camera.setRoomMode(level.rooms || level.roomWidth, level.roomHeight, level.totalRooms);
     }
 
     const player = new Player(level.spawnPoint.x, level.spawnPoint.y);
+    const initSave = saveManager.hasSave() ? saveManager.getSaveData() : null;
+    if (initSave && initSave.checkpoint) {
+        player.x = initSave.checkpoint.x;
+        player.y = initSave.checkpoint.y;
+    } else if (roomQuery !== null) {
+        const targetRoomIdx = Math.max(0, Math.min(level.totalRooms - 1, parseInt(roomQuery, 10)));
+        if (level.getRoomCheckpoint) {
+            const cp = level.getRoomCheckpoint(targetRoomIdx);
+            player.x = cp.x;
+            player.y = cp.y;
+        } else if (level.roomWidth) {
+            player.x = targetRoomIdx * level.roomWidth + 96;
+            player.y = level.spawnPoint.y;
+        }
+    }
     circuitSystem.player = player;
+    player.eventBus = eventBus;
 
     camera.snapTo(player.x, player.y);
 
@@ -79,32 +116,30 @@ async function bootstrap() {
     const animation = new AnimationController(assetLoader);
     const hud = new HUD(player, camera);
 
-    // 5. Global Event Notifications
-    eventBus.on('CIRCUIT_UPDATED', ({ nodeId }) => {
-        hud.setMessage('Circuit junction re-routed! Tracing power grid...');
-    });
+    // 5. Respawn & Core State Events
+    function respawnPlayer(reason = 'LASER') {
+        wireSystem.disconnectWire();
+        const activeRoom = (level.rooms && level.rooms[level.activeRoomIndex]) || { worldX: 0, worldY: 0, pxWid: 640, pxHei: 320 };
+        const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(level.activeRoomIndex) : { x: activeRoom.worldX + 64, y: 192 };
+        player.x = cp.x;
+        player.y = cp.y;
+        player.vx = 0;
+        player.vy = 0;
+        player.isWallSliding = false;
+        player.isWallHanging = false;
+        player.isWallRunning = false;
+        player.isTethered = false;
+        player.shockInvulnTimer = 0; // Clear shock timer to eliminate flickering
+        player.respawnBlinkTimer = 1.2; // Trigger calm 3-blink respawn sequence
 
-    eventBus.on('ACTIVATE_DEVICE', (deviceId) => {
-        if (deviceId === 'exit_door') {
-            hud.setMessage('POWER RESTORED: Blast door unlocking!', 5);
-        } else if (deviceId === 'shaft_left_wall') {
-            hud.setMessage('WARNING: Shaft left wall energized with high voltage!', 4);
-        }
-    });
+        // Energy is ALWAYS restored to full on respawn from any cause
+        player.battery = player.maxBattery || 100;
+        eventBus.emit('BATTERY_CHANGED', player.battery);
+        eventBus.emit('PLAYER_RESPAWN', { reason });
+    }
 
-    eventBus.on('DEACTIVATE_DEVICE', (deviceId) => {
-        if (deviceId === 'shaft_left_wall') {
-            hud.setMessage('SHAFT HAZARD OFFLINE: Wall safe for climbing!', 5);
-        }
-    });
-
-    eventBus.on('PLAYER_SHOCKED', ({ damage }) => {
-        hud.setMessage(`HIGH VOLTAGE SHOCK: -${damage.toFixed(0)}% POWER`, 3.5);
-    });
-
-    eventBus.on('PLAYER_TETHER_JUMP', () => {
-        hud.setMessage('Tether jump executed!');
-    });
+    eventBus.on('PLAYER_LASER_CONTACT', () => respawnPlayer('LASER'));
+    eventBus.on('PLAYER_BATTERY_DEPLETED', () => respawnPlayer('BATTERY_DEPLETED'));
 
     // 6. DevTools / Debug System (Development & Localhost Only - Never loaded in production)
     const IS_DEV = typeof window !== 'undefined' && (
@@ -115,8 +150,9 @@ async function bootstrap() {
 
     let devTools = null;
     if (IS_DEV) {
+        window.__GAME__ = { engine, level, circuitSystem, pipeSystem, player, eventBus, movement, wireSystem, camera, hazardSystem, input, hud };
         try {
-            const { DevTools } = await import('./debug/DevTools.js?v=20261107_v7');
+            const { DevTools } = await import('./debug/DevTools.js?v=20261107_v14');
             devTools = new DevTools({
                 engine,
                 eventBus,
@@ -138,7 +174,94 @@ async function bootstrap() {
         }
     }
 
-    // 7. Composite Game Loop System
+    // 7. Save & UI Manager Integration
+    let lastSavedRoomIndex = level.activeRoomIndex || 0;
+
+    function saveCurrentProgress() {
+        if (!level) return;
+        const activeRoomIdx = level.activeRoomIndex || 0;
+        const roomName = (level.rooms && level.rooms[activeRoomIdx]?.identifier) || `Sector ${activeRoomIdx + 1}`;
+        const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(activeRoomIdx) : { x: player.x, y: player.y };
+        saveManager.saveGame({
+            roomIndex: activeRoomIdx,
+            checkpoint: { x: cp.x, y: cp.y },
+            battery: Math.round(player.battery),
+            roomName
+        });
+    }
+
+    const skipMenu = urlParams ? urlParams.get('skipmenu') === 'true' : false;
+
+    const uiManager = new UIManager({
+        assetLoader,
+        audioManager,
+        saveManager,
+        inputManager: input,
+        onStartNewGame: () => {
+            wireSystem.disconnectWire();
+            const startRoom = 0;
+            level.activeRoomIndex = startRoom;
+            const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(startRoom) : { x: level.spawnPoint.x, y: level.spawnPoint.y };
+            player.x = cp.x;
+            player.y = cp.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.battery = player.maxBattery || 100;
+            camera.snapTo(player.x, player.y);
+            saveCurrentProgress();
+        },
+        onLoadGame: (saveData) => {
+            wireSystem.disconnectWire();
+            const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, saveData.roomIndex || 0));
+            level.activeRoomIndex = targetIdx;
+            const cp = saveData.checkpoint || (level.getRoomCheckpoint ? level.getRoomCheckpoint(targetIdx) : level.spawnPoint);
+            player.x = cp.x;
+            player.y = cp.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.battery = typeof saveData.battery === 'number' ? saveData.battery : 100;
+            camera.snapTo(player.x, player.y);
+        },
+        onRestartLevel: () => {
+            respawnPlayer('RESTART');
+        },
+        onRestartGame: () => {
+            wireSystem.disconnectWire();
+            const startRoom = 0;
+            level.activeRoomIndex = startRoom;
+            const cp = level.getRoomCheckpoint ? level.getRoomCheckpoint(startRoom) : { x: level.spawnPoint.x, y: level.spawnPoint.y };
+            player.x = cp.x;
+            player.y = cp.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.battery = player.maxBattery || 100;
+            player.shockInvulnTimer = 0;
+            player.respawnBlinkTimer = 1.2;
+            camera.snapTo(player.x, player.y);
+            saveCurrentProgress();
+            if (audioManager) {
+                audioManager.resetVisitedRooms();
+                audioManager.playFx('player_respawn', 0.85);
+            }
+            eventBus.emit('BATTERY_CHANGED', player.battery);
+            eventBus.emit('ROOM_CHANGED', { roomIndex: 0, roomId: (level.rooms && level.rooms[0] && level.rooms[0].id) || 'Room_0' });
+        },
+        onExitToMenu: () => {
+            saveCurrentProgress();
+            wireSystem.disconnectWire();
+        }
+    });
+
+    if (window.__GAME__) {
+        window.__GAME__.uiManager = uiManager;
+    }
+
+    if (skipMenu) {
+        uiManager.state = 'PLAYING';
+        audioManager.playMusic('game_levels');
+    }
+
+    // 8. Composite Game Loop System
     const gameMaster = {
         name: 'GameMaster',
         init(eng) {
@@ -149,44 +272,77 @@ async function bootstrap() {
             hazardSystem.init(eng);
         },
         update(dt) {
-            // Level entities update
-            level.update(dt, player);
+            // UI Manager update (handles menu buttons, slider drags, Esc key)
+            uiManager.update(dt);
 
-            // Circuit rotation & power propagation
-            circuitSystem.update(dt);
-
-            // Pipe flow system energy animation & lights
+            // Ambient visual animations (pipe energy pulses & player idle breathing) run across ALL states
             pipeSystem.update(dt);
-
-            // Electrified hazards & shock detection
-            hazardSystem.update(dt);
-
-            // Player kinematics & collisions
-            movement.update(dt);
-
-            // Wire aiming, projectile & pendulum constraint
-            wireSystem.update(dt);
-
-            // Fall-out-of-bounds safety respawn
-            if (player.y > level.height + 50) {
-                wireSystem.disconnectWire();
-                const roomIdx = level.activeRoomIndex !== undefined ? level.activeRoomIndex : 0;
-                player.x = roomIdx * (level.roomWidth || 640) + 64;
-                player.y = 192;
-                player.vx = 0;
-                player.vy = 0;
-                hud.setMessage('Unit recovered to nearest safety platform.');
-            }
-
-            // Sprite animation timing
             animation.update(dt, player);
 
-            // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
-            camera.follow(player);
-            camera.update();
+            if (uiManager.state === 'PLAYING') {
+                // Full gameplay physics kinematics, collisions, hazards, wire & entity updates
+                level.update(dt, player, input);
 
-            // HUD
-            hud.update(dt);
+                // Auto-save on room change
+                if (level.activeRoomIndex !== lastSavedRoomIndex) {
+                    lastSavedRoomIndex = level.activeRoomIndex;
+                    saveCurrentProgress();
+                }
+
+                // Circuit rotation & power propagation
+                circuitSystem.update(dt);
+
+                // Electrified hazards & shock detection
+                hazardSystem.update(dt);
+
+                // Player kinematics & collisions
+                movement.update(dt);
+
+                // Wire aiming, projectile & pendulum constraint
+                wireSystem.update(dt);
+
+                // Fall-out-of-bounds safety respawn
+                const activeRoom = (level.rooms && level.rooms[level.activeRoomIndex]) || { worldX: 0, worldY: 0, pxWid: 640, pxHei: 320 };
+                if (player.y > activeRoom.worldY + activeRoom.pxHei + 40) {
+                    respawnPlayer('FALL');
+                }
+
+                // Zero power reboot respawn
+                if (player.battery <= 0 && player.shockInvulnTimer <= 0) {
+                    respawnPlayer('BATTERY_DEPLETED');
+                }
+
+                // Final Sector Victory Trigger
+                if (activeRoom.id === 'And_gate_3_above' && player.x >= 3792 && player.y < 0) {
+                    uiManager.showVictory();
+                }
+
+                // Smooth camera tracking (room-by-room sliding in LDtk, free-follow in testroom)
+                camera.follow(player);
+                camera.update();
+
+                // HUD
+                hud.update(dt);
+            } else {
+                // In menus / pause: keep ambient entity visuals animated (drones hovering & thrusters, blast doors)
+                // while kinematics, physics, timers, wire, and hazard shocks remain 100% frozen
+                if (level && level.drones) {
+                    for (const drone of level.drones) {
+                        drone.update(dt, player);
+                    }
+                }
+                if (level && level.doors) {
+                    for (const d of level.doors) {
+                        const targetProgress = d.isOpen ? 1 : 0;
+                        if (d.openProgress !== targetProgress) {
+                            const step = dt * 1.8;
+                            d.openProgress = targetProgress > d.openProgress
+                                ? Math.min(targetProgress, d.openProgress + step)
+                                : Math.max(targetProgress, d.openProgress - step);
+                        }
+                    }
+                }
+            }
 
             // DevTools update
             if (devTools) {
@@ -197,16 +353,31 @@ async function bootstrap() {
             input.postUpdate();
         },
         render(ctx, alpha) {
-            // World Space Rendering
+            const isTitleFlow = uiManager.state === 'MAIN_MENU' ||
+                (uiManager.state === 'OPTIONS' && uiManager.previousState === 'MAIN_MENU');
+
+            if (isTitleFlow) {
+                // Focus camera on saved room or initial room
+                const save = saveManager.hasSave() ? saveManager.getSaveData() : null;
+                const menuRoomIdx = save && typeof save.roomIndex === 'number' ? save.roomIndex : 0;
+                if (level.rooms && level.rooms[menuRoomIdx]) {
+                    const r = level.rooms[menuRoomIdx];
+                    camera.snapTo(r.worldX + r.pxWid / 2, r.worldY + r.pxHei / 2);
+                } else {
+                    camera.snapTo(player.x, player.y);
+                }
+            }
+
+            // World Space Rendering (Always renders world + player robot)
             camera.applyTransform(ctx);
 
-            level.renderBackground(ctx);
-            pipeSystem.render(ctx);
-            circuitSystem.render(ctx);
-            level.renderForeground(ctx);
-            hazardSystem.render(ctx);
+            level.renderBackground(ctx, camera);
+            pipeSystem.render(ctx, camera);
+            circuitSystem.render(ctx, camera);
+            level.renderForeground(ctx, camera);
+            hazardSystem.render(ctx, camera);
             wireSystem.render(ctx);
-            animation.render(ctx, player);
+            animation.render(ctx, player); // Player robot is always present in the scene
 
             // DevTools world-space gizmos
             if (devTools) {
@@ -215,12 +386,25 @@ async function bootstrap() {
 
             camera.restoreTransform(ctx);
 
-            // Screen Space HUD Rendering
-            hud.render(ctx);
+            // Screen Space
+            if (isTitleFlow) {
+                // Translucent dimming veil over background
+                ctx.fillStyle = 'rgba(8, 12, 18, 0.78)';
+                ctx.fillRect(0, 0, 1280, 720);
 
-            // DevTools screen-space telemetry overlay
-            if (devTools) {
-                devTools.renderScreen(ctx);
+                // Render Title screen or Options overlay (HUD remains hidden until game starts)
+                uiManager.render(ctx);
+            } else {
+                // In-Game Flow (PLAYING, PAUSED, or in-game OPTIONS): HUD is visible
+                hud.render(ctx);
+
+                // UI Overlay (Pause Menu or in-game Options Menu)
+                uiManager.render(ctx);
+
+                // DevTools screen-space telemetry overlay
+                if (devTools) {
+                    devTools.renderScreen(ctx);
+                }
             }
         }
     };

@@ -27,6 +27,22 @@ export class AnimationController {
         };
 
         this.chargePulse = 0;
+        this._cachedHeroMeta = null;
+        this._cachedHeroSheet = null;
+    }
+
+    _getHeroMeta() {
+        if (!this._cachedHeroMeta && this.assetLoader) {
+            this._cachedHeroMeta = this.assetLoader.getJSON('hero_meta');
+        }
+        return this._cachedHeroMeta;
+    }
+
+    _getHeroSheet() {
+        if (!this._cachedHeroSheet && this.assetLoader) {
+            this._cachedHeroSheet = this.assetLoader.getImage('hero_sheet');
+        }
+        return this._cachedHeroSheet;
     }
 
     update(dt, player) {
@@ -64,7 +80,7 @@ export class AnimationController {
         const frameDuration = 1 / fps;
         this.frameTimer += dt;
 
-        const spriteData = this.assetLoader.getJSON('hero_meta');
+        const spriteData = this._getHeroMeta();
         const frames = spriteData ? spriteData[this.currentAnim] : null;
 
         if (frames && frames.length > 0) {
@@ -93,18 +109,22 @@ export class AnimationController {
     }
 
     render(ctx, player) {
-        const spriteImg = this.assetLoader.getImage('hero_sheet');
-        const spriteMeta = this.assetLoader.getJSON('hero_meta');
+        const spriteImg = this._getHeroSheet();
+        const spriteMeta = this._getHeroMeta();
 
         ctx.save();
 
-        // Shock invulnerability flicker
-        if (player.shockInvulnTimer > 0 && Math.sin(player.shockInvulnTimer * 45) > 0) {
-            ctx.globalAlpha = 0.35;
+        // Calm 3-blink respawn sequence (0.4s per cycle: 0.2s dim / 0.2s visible x 3 cycles)
+        if (player.respawnBlinkTimer > 0) {
+            const elapsed = 1.2 - player.respawnBlinkTimer;
+            const cyclePhase = (elapsed / 0.4) % 1;
+            if (cyclePhase < 0.5) {
+                ctx.globalAlpha = 0.35;
+            }
         }
 
-        // Render wall friction sparks if wall sliding
-        if (player.isWallSliding) {
+        // Render wall friction sparks if wall sliding (only when actively descending)
+        if (player.isWallSliding && player.vy > 10) {
             const wallX = player.wallSlideDirection === -1 ? player.x : player.x + player.width;
             ctx.fillStyle = '#ffaa00';
             for (let i = 0; i < 2; i++) {
@@ -113,28 +133,17 @@ export class AnimationController {
             }
         }
 
-        // Render charging energy aura if recharging
+        // Subtle micro-sparks if recharging
         if (player.isCharging) {
             const head = player.getHeadSocket();
-            const glowRadius = 20 + Math.sin(this.chargePulse) * 4;
-            const gradient = ctx.createRadialGradient(head.x, head.y, 2, head.x, head.y, glowRadius);
-            gradient.addColorStop(0, 'rgba(255, 240, 100, 0.7)');
-            gradient.addColorStop(0.5, 'rgba(0, 240, 255, 0.3)');
-            gradient.addColorStop(1, 'rgba(0, 240, 255, 0)');
-
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(head.x, head.y, glowRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Energy sparks
+            // Tactile energy micro-sparks
             for (let i = 0; i < 3; i++) {
                 const angle = this.chargePulse + i * 2.1;
-                const dist = 8 + Math.cos(this.chargePulse * 1.5 + i) * 6;
+                const dist = 6 + Math.cos(this.chargePulse * 1.5 + i) * 4;
                 const sx = head.x + Math.cos(angle) * dist;
                 const sy = head.y + Math.sin(angle) * dist;
                 ctx.fillStyle = '#fffa65';
-                ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+                ctx.fillRect(sx - 1, sy - 1, 2, 2);
             }
         }
 

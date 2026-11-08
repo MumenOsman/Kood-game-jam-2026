@@ -21,19 +21,24 @@ export class Player {
         this.wasGrounded = false;
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
+        this.groundJumpWallGraceTimer = 0; // Grace timer: ascending from ground jump does not stick to adjacent wall
 
         // Wall sliding / wall jumping states
         this.isWallSliding = false;
+        this.isWallHolding = false;
+        this.wallCatchTimer = 0; // Momentary grip cushion upon catching wall
         this.wallSlideDirection = 0; // -1 = touching left wall, 1 = touching right wall
+        this.wallJumpOriginFace = 0; // -1 or 1, tracks the wall face we jumped from
         this.wallCoyoteTimer = 0;
         this.wallJumpLockTimer = 0; // Brief directional lock during wall kick
         this.shockInvulnTimer = 0; // Invulnerability / stun timer after shock
+        this.respawnBlinkTimer = 0; // Calm 3-blink timer after respawn
 
         // Tether states (strictly locked to max 3 tiles = 96px)
         this.isTethered = false;
         this.tetherSocket = null;
         this.tetherLength = 0;
-        this.tetherMaxDist = 96; // 3 squares (3 x 32px)
+        this.tetherMaxDist = 80; // 2.5 squares (2.5 x 32px)
 
         // Aiming / Throw states
         this.isAiming = false;
@@ -57,6 +62,9 @@ export class Player {
         if (this.battery <= 0) return 0;
         const prev = this.battery;
         this.battery = Math.max(0, this.battery - amount);
+        if (this.battery <= 0 && this.eventBus) {
+            this.eventBus.emit('PLAYER_BATTERY_DEPLETED');
+        }
         return prev - this.battery;
     }
 

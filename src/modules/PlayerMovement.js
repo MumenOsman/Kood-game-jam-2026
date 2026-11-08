@@ -13,21 +13,19 @@ export class PlayerMovement {
         this.level = level;
 
         // Kinematics tuning in grid squares (32px per square)
-        this.jumpHeightSquares = 2.0; // Strictly 2 squares (64px) apex
-        this.jumpSpanSquares = 2.0;   // Strictly 2 squares (64px) horizontal landing span
-        this.walkSpeedSquares = 5.0;  // 5 squares/sec = 160 px/s
-        this.runSpeedSquares = 8.0;   // 8 squares/sec = 256 px/s
+        this.jumpHeightSquares = 1.5; // Strictly 1.5 squares (48px) apex
+        this.jumpSpanSquares = 2.5;   // Strictly 2.5 squares (80px) horizontal landing span
+        this.walkSpeedSquares = 8.0;  // 8 squares/sec = 256 px/s
+        this.runSpeedSquares = 11.5;  // 11.5 squares/sec = 368 px/s
         this.crawlSpeedSquares = 2.5; // Emergency depleted speed = 80 px/s
         this.wallJumpUpSquares = 2.0;
-        this.wallJumpOutSquares = 2.0;
+        this.wallJumpOutSquares = 3.0;
         this.tetherJumpUpSquares = 2.0;
         this.tetherJumpOutSquares = 2.0;
 
         // Kinematics flags (Option 1 Arcade deterministic mode)
         this.instantLocomotion = true;   // Instant ground response (0 accel ramp, 0 slide) & deterministic jump span
-        this.variableJumpHeight = false; // Fixed deterministic jump height (Space tap reaches full 2 squares)
-
-        // Physics constants
+        this.variableJumpHeight = false; // Fixed deterministic jump height
         this.GRAVITY = 1400;
         this.MAX_FALL_SPEED = 850;
         this.GROUND_ACCEL = 2500;
@@ -50,12 +48,12 @@ export class PlayerMovement {
         this.IDLE_REST_THRESHOLD = 3.5; // 3.5s before resting
 
         // Modular Wall Run & Wall Jump constants
-        this.MAX_WALL_SLIDE_SPEED = 110; // Normal descent speed while sliding (px/s)
-        this.FAST_WALL_SLIDE_SPEED = 320; // Fast slide descent speed when holding S (px/s)
-        this.WALL_JUMP_UP = -490; // Upward leap impulse (px/s)
-        this.WALL_JUMP_OUTWARD = 340; // Horizontal impulse away from wall (px/s)
+        this.MAX_WALL_SLIDE_SPEED = 60; // Steady, controlled descent speed while sliding (px/s)
+        this.FAST_WALL_SLIDE_SPEED = 280; // Fast slide descent speed when holding S (px/s)
+        this.WALL_CUSHION_SPEED = 30; // Momentary grip cushion upon initial wall contact (px/s)
+        this.WALL_CUSHION_TIME = 0.09; // 90ms initial contact cushion duration
         this.WALL_COYOTE_TIME = 0.10; // 100ms grace window after leaving wall
-        this.WALL_JUMP_LOCK_TIME = 0.15; // 150ms directional lock to preserve jump arc
+        this.WALL_JUMP_LOCK_TIME = 0.12; // 120ms directional lock to preserve jump arc
     }
 
     get TILE_SIZE() { return 32; }
@@ -139,6 +137,7 @@ export class PlayerMovement {
             p.vx = knockbackX;
             p.vy = knockbackY;
             p.isWallSliding = false;
+            p.isWallHolding = false;
             p.wallCoyoteTimer = 0;
             this.eventBus.emit('BATTERY_CHANGED', p.battery);
         });
@@ -146,12 +145,18 @@ export class PlayerMovement {
 
     update(dt) {
         const p = this.player;
+        const prevWallSliding = p.isWallSliding;
+        const prevWallDir = p.wallSlideDirection;
 
         // 1. Process Timers
         if (p.isGrounded) {
             p.coyoteTimer = this.COYOTE_TIME;
+            p.groundJumpWallGraceTimer = 0;
         } else {
             p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
+            if (p.groundJumpWallGraceTimer > 0) {
+                p.groundJumpWallGraceTimer -= dt;
+            }
         }
 
         // Jump buffer from Space ONLY (wall jump is executed solely via Space)
@@ -161,23 +166,30 @@ export class PlayerMovement {
             p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
         }
 
+        if (p.wallCatchTimer > 0) {
+            p.wallCatchTimer -= dt;
+        }
         if (p.wallJumpLockTimer > 0) {
             p.wallJumpLockTimer -= dt;
         }
         if (p.shockInvulnTimer > 0) {
             p.shockInvulnTimer -= dt;
         }
+        if (p.respawnBlinkTimer > 0) {
+            p.respawnBlinkTimer -= dt;
+        }
 
         // 2. Tether Mid-Air Jump Handling
         if (p.isTethered && !p.isGrounded && p.jumpBufferTimer > 0) {
             this._performTetherJump();
             p.jumpBufferTimer = 0;
-            return;
         }
 
-        // 3. Wall Slide & Wall Jump Handling
+        // 3. Wall Slide & Wall Jump Handling (Continuous Controlled Slide)
         p.isWallSliding = false;
-        if (!p.isGrounded && !p.isTethered && p.shockInvulnTimer <= 0 && p.wallJumpLockTimer <= 0 && p.vy > -80) {
+        p.isWallHolding = false;
+
+        if (!p.isGrounded && !p.isTethered && p.shockInvulnTimer <= 0) {
             const wallRunners = this.level ? this.level.getWallRunColliders() : [];
             for (const col of wallRunners) {
                 if (col.isElectrified) continue; // Cannot wall-slide on electrified surface
@@ -188,34 +200,80 @@ export class PlayerMovement {
                 const face = col.wallRunFace || 'both';
 
                 // Right face of collider (wall is to player's left: player is at col.x + col.width)
-                // Automatically sticks without needing A or D
                 const canTouchRightFace = (face === 'right' || face === 'both');
                 const touchingRightFace = canTouchRightFace && Math.abs(p.x - (col.x + col.width)) <= 10;
 
                 // Left face of collider (wall is to player's right: player is at col.x - player.width)
-                // Automatically sticks without needing A or D
                 const canTouchLeftFace = (face === 'left' || face === 'both');
                 const touchingLeftFace = canTouchLeftFace && Math.abs((p.x + p.width) - col.x) <= 10;
 
-                const targetSlideSpeed = this.input.moveDown ? this.FAST_WALL_SLIDE_SPEED : this.MAX_WALL_SLIDE_SPEED;
+                // Prevent immediate re-latching to the exact SAME wall face during wallJumpLockTimer
+                // (Touching opposite wall latches immediately to allow rhythmic chimney scaling!)
+                if (p.wallJumpLockTimer > 0) {
+                    if (touchingRightFace && p.wallJumpOriginFace === -1) continue;
+                    if (touchingLeftFace && p.wallJumpOriginFace === 1) continue;
+                }
+
+                // Ground jump ascent grace: standing on ground next to a wall and jumping must NOT stick to the wall!
+                if (p.groundJumpWallGraceTimer > 0 && p.vy < 0) {
+                    continue;
+                }
 
                 if (touchingRightFace) {
+                    const isFreshContact = !prevWallSliding || prevWallDir !== -1;
                     p.isWallSliding = true;
                     p.wallSlideDirection = -1; // Wall is to the player's left
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
-                    p.vy = targetSlideSpeed;
+                    p.wallJumpLockTimer = 0; // Clear jump lock upon catching wall
+                    p.wallJumpOriginFace = 0;
                     p.vx = 0;
                     p.x = col.x + col.width;
                     p.facing = -1;
+
+                    // When first contacting a wall from mid-air:
+                    // 1. Clear pre-contact airborne jump buffer so player does not bounce immediately!
+                    // 2. Start momentary wall catch cushion timer
+                    if (isFreshContact) {
+                        p.jumpBufferTimer = 0;
+                        p.wallCatchTimer = this.WALL_CUSHION_TIME;
+                    }
+
+                    // Continuous slide:
+                    if (this.input.moveDown) {
+                        p.vy = this.FAST_WALL_SLIDE_SPEED;
+                    } else if (p.wallCatchTimer > 0) {
+                        p.vy = this.WALL_CUSHION_SPEED; // Initial tactile cushion
+                    } else {
+                        p.vy = this.MAX_WALL_SLIDE_SPEED; // Steady downward slide (90 px/s)
+                    }
                     break;
                 } else if (touchingLeftFace) {
+                    const isFreshContact = !prevWallSliding || prevWallDir !== 1;
                     p.isWallSliding = true;
                     p.wallSlideDirection = 1; // Wall is to the player's right
                     p.wallCoyoteTimer = this.WALL_COYOTE_TIME;
-                    p.vy = targetSlideSpeed;
+                    p.wallJumpLockTimer = 0; // Clear jump lock upon catching wall
+                    p.wallJumpOriginFace = 0;
                     p.vx = 0;
                     p.x = col.x - p.width;
                     p.facing = 1;
+
+                    // When first contacting a wall from mid-air:
+                    // 1. Clear pre-contact airborne jump buffer so player does not bounce immediately!
+                    // 2. Start momentary wall catch cushion timer
+                    if (isFreshContact) {
+                        p.jumpBufferTimer = 0;
+                        p.wallCatchTimer = this.WALL_CUSHION_TIME;
+                    }
+
+                    // Continuous slide:
+                    if (this.input.moveDown) {
+                        p.vy = this.FAST_WALL_SLIDE_SPEED;
+                    } else if (p.wallCatchTimer > 0) {
+                        p.vy = this.WALL_CUSHION_SPEED; // Initial tactile cushion
+                    } else {
+                        p.vy = this.MAX_WALL_SLIDE_SPEED; // Steady downward slide (90 px/s)
+                    }
                     break;
                 }
             }
@@ -234,6 +292,8 @@ export class PlayerMovement {
 
         // 4. Resting / Docking & Idle State
         let horizontalIntent = 0;
+        // Direction keys A/D are completely locked out while holding/sliding on a wall.
+        // The player is securely clinging to the wall and can leave ONLY via Space (wall jump) or Down (slide down).
         if (p.wallJumpLockTimer <= 0 && !p.isWallSliding) {
             if (this.input.moveLeft) horizontalIntent -= 1;
             if (this.input.moveRight) horizontalIntent += 1;
@@ -264,21 +324,19 @@ export class PlayerMovement {
             }
         }
 
-        // Recharging battery when connected to CHARGER socket
+        // Recharging battery strictly when connected to CHARGER socket
         if (p.isTethered && p.tetherSocket && p.tetherSocket.type === 'CHARGER') {
+            const wasCharging = p.isCharging;
             p.isCharging = true;
+            if (!wasCharging) {
+                this.eventBus.emit('CHARGER_CONNECTED');
+            }
             if (p.battery < p.maxBattery) {
                 p.addBattery(this.CHARGER_RATE * dt);
                 this.eventBus.emit('BATTERY_CHANGED', p.battery);
             }
         } else {
             p.isCharging = false;
-        }
-
-        // Emergency trickle recharge while resting if battery is under safety threshold
-        if (p.isResting && p.battery < this.REST_TRICKLE_THRESHOLD && !p.isCharging) {
-            p.addBattery(this.REST_TRICKLE_RATE * dt);
-            this.eventBus.emit('BATTERY_CHANGED', p.battery);
         }
 
         // If resting, dampen movement
@@ -290,16 +348,8 @@ export class PlayerMovement {
         }
 
         // 4. Horizontal Locomotion & Max Speed
-        // Low power disables sprinting; depleted power reduces to emergency crawl
-        const canRun = !p.isLowPower && !p.isDepleted;
-        const isRunning = canRun && this.input.isRunning;
-
-        let baseWalkSpeed = this.WALK_SPEED;
-        if (p.isDepleted) {
-            baseWalkSpeed = this.CRAWL_SPEED;
-        }
-
-        const targetSpeed = (isRunning ? this.RUN_SPEED : baseWalkSpeed) * horizontalIntent;
+        // Battery loss does NOT reduce or degrade player movement speed
+        const targetSpeed = this.WALK_SPEED * horizontalIntent;
 
         if (this.instantLocomotion) {
             // ARCADE DETERMINISTIC LOCOMOTION (Brawlhalla style)
@@ -307,15 +357,20 @@ export class PlayerMovement {
                 // Instant crisp response, 0 lag, instant stop
                 p.vx = targetSpeed;
                 if (horizontalIntent !== 0) {
-                    const drainRate = isRunning ? this.DRAIN_RUN : this.DRAIN_WALK;
-                    p.drainBattery(drainRate * dt);
+                    p.drainBattery(this.DRAIN_WALK * dt);
                     this.eventBus.emit('BATTERY_CHANGED', p.battery);
                 }
-            } else {
-                // In air: horizontal speed is locked to JUMP_HORIZONTAL_SPEED to guarantee 2-tile span
+            } else if (!p.isTethered) {
+                // In air (NOT tethered): horizontal aerial steering
                 if (p.wallJumpLockTimer <= 0) {
                     if (horizontalIntent !== 0) {
-                        p.vx = horizontalIntent * this.JUMP_HORIZONTAL_SPEED;
+                        // If player already has high momentum in intended direction (e.g. from swing release or wall jump),
+                        // preserve high momentum rather than clamping down!
+                        if (Math.sign(p.vx) === horizontalIntent && Math.abs(p.vx) > this.JUMP_HORIZONTAL_SPEED) {
+                            p.vx *= Math.pow(this.AIR_DRAG, dt * 60);
+                        } else {
+                            p.vx = horizontalIntent * this.JUMP_HORIZONTAL_SPEED;
+                        }
                     } else {
                         // In mid-air with no directional key, decay cleanly
                         p.vx *= Math.pow(this.AIR_DRAG, dt * 60);
@@ -328,8 +383,7 @@ export class PlayerMovement {
             const accel = p.isGrounded ? this.GROUND_ACCEL : this.AIR_ACCEL;
             if (horizontalIntent !== 0) {
                 if (p.isGrounded) {
-                    const drainRate = isRunning ? this.DRAIN_RUN : this.DRAIN_WALK;
-                    p.drainBattery(drainRate * dt);
+                    p.drainBattery(this.DRAIN_WALK * dt);
                     this.eventBus.emit('BATTERY_CHANGED', p.battery);
                 }
 
@@ -352,19 +406,25 @@ export class PlayerMovement {
             }
         }
 
+        // Rhythmic footstep emission on ground locomotion
+        if (p.isGrounded && Math.abs(p.vx) > 30 && !p.isWallSliding && !p.isWallRunning) {
+            this.stepTimer = (this.stepTimer || 0) + dt;
+            const stepInterval = Math.abs(p.vx) > 160 ? 0.28 : 0.40;
+            if (this.stepTimer >= stepInterval) {
+                this.stepTimer = 0;
+                this.eventBus.emit('PLAYER_FOOTSTEP');
+            }
+        } else {
+            this.stepTimer = 0.2;
+        }
+
         // 5. Normal Ground Jump
         if (p.jumpBufferTimer > 0 && p.coyoteTimer > 0) {
-            let jumpVel = this.JUMP_SPEED;
-            if (p.isDepleted) {
-                jumpVel = this.JUMP_SPEED * 0.5;
-            } else if (p.isLowPower) {
-                jumpVel = this.JUMP_SPEED * 0.75;
-            }
-
-            p.vy = jumpVel;
+            p.vy = this.JUMP_SPEED;
             p.coyoteTimer = 0;
             p.jumpBufferTimer = 0;
             p.isGrounded = false;
+            p.groundJumpWallGraceTimer = 0.28; // Grace timer: ascending from ground jump does not stick to adjacent wall
 
             // In arcade locomotion mode, clamp initial horizontal velocity to JUMP_HORIZONTAL_SPEED
             // so jumping while sprinting does not overshoot the 2-tile span!
@@ -383,7 +443,8 @@ export class PlayerMovement {
         }
 
         // Variable jump height cut ONLY when variableJumpHeight is enabled
-        if (this.variableJumpHeight && !this.input.isKeyDown('Space') && p.vy < -150) {
+        const isJumpHeld = this.input.isActionDown ? this.input.isActionDown('jump') : this.input.isKeyDown('Space');
+        if (this.variableJumpHeight && !isJumpHeld && p.vy < -150) {
             p.vy *= 0.65;
         }
 
@@ -424,8 +485,11 @@ export class PlayerMovement {
         p.vy = this.WALL_JUMP_UP;
         p.facing = jumpDir;
         p.wallJumpLockTimer = this.WALL_JUMP_LOCK_TIME;
+        p.wallJumpOriginFace = p.wallSlideDirection; // Track origin face to prevent re-latching to same face
         p.wallCoyoteTimer = 0;
         p.isWallSliding = false;
+        p.isWallHolding = false;
+        p.groundJumpWallGraceTimer = 0;
 
         p.drainBattery(this.COST_JUMP);
         this.eventBus.emit('BATTERY_CHANGED', p.battery);
@@ -435,7 +499,13 @@ export class PlayerMovement {
     _applyGravity(dt) {
         const p = this.player;
         if (p.isWallSliding) {
-            p.vy = this.input.moveDown ? this.FAST_WALL_SLIDE_SPEED : this.MAX_WALL_SLIDE_SPEED;
+            if (this.input.moveDown) {
+                p.vy = this.FAST_WALL_SLIDE_SPEED;
+            } else if (p.wallCatchTimer > 0) {
+                p.vy = this.WALL_CUSHION_SPEED;
+            } else {
+                p.vy = this.MAX_WALL_SLIDE_SPEED;
+            }
             return;
         }
         p.vy += this.GRAVITY * dt;
@@ -448,17 +518,84 @@ export class PlayerMovement {
         const p = this.player;
         p.wasGrounded = p.isGrounded;
 
-        // 1. Move X & check horizontal collisions
-        p.x += p.vx * dt;
-        let bounds = p.getBounds();
         const colliders = this.level ? this.level.getSolidColliders() : [];
 
+        // 1. Move X & check horizontal collisions (swept with vertical overlap check)
+        const prevX = p.x;
+        p.x += p.vx * dt;
+
+        if (p.vx > 0) {
+            for (const col of colliders) {
+                if (col.x > p.x + 160 || col.x + col.width < p.x - 160 || col.y > p.y + 160 || col.y + col.height < p.y - 160) continue;
+                if (p.y < col.y + col.height && p.y + p.height > col.y) {
+                    if (prevX + p.width <= col.x && p.x + p.width > col.x) {
+                        p.x = col.x - p.width;
+                        p.vx = 0;
+                    }
+                }
+            }
+        } else if (p.vx < 0) {
+            for (const col of colliders) {
+                if (col.x > p.x + 160 || col.x + col.width < p.x - 160 || col.y > p.y + 160 || col.y + col.height < p.y - 160) continue;
+                if (p.y < col.y + col.height && p.y + p.height > col.y) {
+                    if (prevX >= col.x + col.width && p.x < col.x + col.width) {
+                        p.x = col.x + col.width;
+                        p.vx = 0;
+                    }
+                }
+            }
+        }
+
+        // 2. Move Y & check vertical collisions (swept with horizontal overlap check)
+        const prevY = p.y;
+        p.y += p.vy * dt;
+        p.isGrounded = false;
+
+        if (p.vy > 0) {
+            for (const col of colliders) {
+                if (col.x > p.x + 160 || col.x + col.width < p.x - 160 || col.y > p.y + 160 || col.y + col.height < p.y - 160) continue;
+                if (p.x < col.x + col.width && p.x + p.width > col.x) {
+                    if (prevY + p.height <= col.y && p.y + p.height > col.y) {
+                        p.y = col.y - p.height;
+                        p.vy = 0;
+                        p.isGrounded = true;
+                    }
+                }
+            }
+        } else if (p.vy < 0) {
+            for (const col of colliders) {
+                if (col.x > p.x + 160 || col.x + col.width < p.x - 160 || col.y > p.y + 160 || col.y + col.height < p.y - 160) continue;
+                if (p.x < col.x + col.width && p.x + p.width > col.x) {
+                    if (prevY >= col.y + col.height && p.y < col.y + col.height) {
+                        p.y = col.y + col.height;
+                        p.vy = 0;
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: resolve any remaining deep penetration along minimum translation vector (MTV)
+        let bounds = p.getBounds();
         for (const col of colliders) {
+            if (col.x > p.x + 160 || col.x + col.width < p.x - 160 || col.y > p.y + 160 || col.y + col.height < p.y - 160) continue;
             if (this._checkAABB(bounds, col)) {
-                if (p.vx > 0) {
+                const overlapLeft = (p.x + p.width) - col.x;
+                const overlapRight = (col.x + col.width) - p.x;
+                const overlapTop = (p.y + p.height) - col.y;
+                const overlapBottom = (col.y + col.height) - p.y;
+                const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                if (minOverlap === overlapTop) {
+                    p.y = col.y - p.height;
+                    p.vy = 0;
+                    p.isGrounded = true;
+                } else if (minOverlap === overlapBottom) {
+                    p.y = col.y + col.height;
+                    if (p.vy < 0) p.vy = 0;
+                } else if (minOverlap === overlapLeft) {
                     p.x = col.x - p.width;
                     p.vx = 0;
-                } else if (p.vx < 0) {
+                } else {
                     p.x = col.x + col.width;
                     p.vx = 0;
                 }
@@ -466,23 +603,25 @@ export class PlayerMovement {
             }
         }
 
-        // 2. Move Y & check vertical collisions
-        p.y += p.vy * dt;
-        bounds = p.getBounds();
-        p.isGrounded = false;
+        // 4. Ceiling boundary clamp:
+        // Inside And_gate_3_above, row 0 is solid across all columns (ceiling at -288)
+        const activeRoom = (this.level && this.level.rooms && this.level.rooms[this.level.activeRoomIndex]) || null;
+        const facilityCeilingY = (this.level && this.level.rooms && this.level.rooms.length > 0)
+            ? Math.min(...this.level.rooms.map(r => r.worldY))
+            : -320;
 
-        for (const col of colliders) {
-            if (this._checkAABB(bounds, col)) {
-                if (p.vy > 0) { // Landing on top of a platform
-                    p.y = col.y - p.height;
-                    p.vy = 0;
-                    p.isGrounded = true;
-                } else if (p.vy < 0) { // Hitting ceiling
-                    p.y = col.y + col.height;
-                    p.vy = 0;
-                }
-                bounds = p.getBounds();
+        if (activeRoom && activeRoom.id === 'And_gate_3_above') {
+            if (p.y < activeRoom.worldY + 32) {
+                p.y = activeRoom.worldY + 32;
+                if (p.vy < 0) p.vy = 0;
             }
+        } else if (p.y < facilityCeilingY) {
+            p.y = facilityCeilingY;
+            if (p.vy < 0) p.vy = 0;
+        }
+
+        if (!p.wasGrounded && p.isGrounded) {
+            this.eventBus.emit('PLAYER_LAND');
         }
     }
 

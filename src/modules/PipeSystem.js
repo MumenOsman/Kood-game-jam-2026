@@ -3,23 +3,40 @@
  * Core industrial energy flow and pipe conduit propagation engine.
  * 
  * Strict Architecture:
+ * - Generic 2D spatial grid BFS wavefront engine (zero hardcoded level coordinates).
  * - Locked strictly to 32px tile grid.
- * - Parses and renders the authentic metallic pipes layer from map.ldtk (circuits_sheet).
+ * - Dynamic cardinal port matching [Top, Right, Bottom, Left] across pipes, dials, gates, and devices.
+ * - Seamless dial-to-dial adjacent power transfer.
+ * - Exclusive OR (XOR) gate logic: inactive on 0 inputs, active on 1 input, conflict/off on >= 2 inputs.
+ * - Natural physical device responses: hazards electrify when receiving power; doors open when powered.
  * - Multi-layer visual pipeline:
  *   1. Crisp pixel-art casing from Circuits(4).png.
  *   2. Illuminated energized lumen channel (molten golden core + white-hot filament).
  *   3. Continuous traveling electrical light pulses streaming in the flow direction.
- *   4. Seamless 90-degree corner light bending.
+ *   4. Seamless 90-degree corner light bending for all corner types.
  *   5. Tactile micro-sparks and junction status LED rivets.
- *   6. Dynamic power propagation connecting ceiling feed -> dials -> logic gates -> door & status light box.
  */
 
-const PORT = {
+export const PORT = {
     TOP: 0,
     RIGHT: 1,
     BOTTOM: 2,
     LEFT: 3
 };
+
+export const OPPOSITE_PORT = [
+    PORT.BOTTOM,
+    PORT.LEFT,
+    PORT.TOP,
+    PORT.RIGHT
+];
+
+export const PORT_DELTAS = [
+    { dx: 0, dy: -1 }, // TOP
+    { dx: 1, dy: 0 },  // RIGHT
+    { dx: 0, dy: 1 },  // BOTTOM
+    { dx: -1, dy: 0 }  // LEFT
+];
 
 export class PipeSystem {
     constructor(eventBus, assetLoader = null, circuitSystem = null, level = null) {
@@ -32,11 +49,11 @@ export class PipeSystem {
         this.pulseTimer = 0;
         this.sparks = [];
 
-        // Wall conduit bridge between Room 2 Chamber 1 and Chamber 2
-        this.wallConduit = {
-            x1: 1536,
+        // Chamber 1 hazard conduit terminal representation
+        this.leftHazardConduit = {
+            x1: 1504,
             y: 144,
-            x2: 1760,
+            x2: 1536,
             isPowered: false
         };
 
@@ -68,7 +85,7 @@ export class PipeSystem {
     loadPipes(rawPipes) {
         this.pipes = [];
         for (const p of rawPipes) {
-            const type = this._classifyPipeType(p.srcX, p.srcY);
+            const info = this._classifyPipe(p.srcX, p.srcY);
             this.pipes.push({
                 id: `pipe_${p.x}_${p.y}`,
                 x: p.x,
@@ -78,7 +95,8 @@ export class PipeSystem {
                 srcX: p.srcX,
                 srcY: p.srcY,
                 tileId: p.tileId,
-                type: type,
+                type: info.type,
+                ports: [...info.ports],
                 isPowered: false,
                 flowDir: { dx: 0, dy: 1 }
             });
@@ -86,230 +104,356 @@ export class PipeSystem {
         this.recalculatePower();
     }
 
-    _classifyPipeType(srcX, srcY) {
-        if (srcX === 96 && srcY === 64) return 'VERT';
-        if ((srcX === 0 && srcY === 64) || (srcX === 32 && srcY === 96)) return 'HORZ';
-        if (srcX === 64 && srcY === 128) return 'CR_R'; // Right & Bottom
-        if (srcX === 0 && srcY === 128) return 'CR_L';  // Left & Bottom
-        return 'VERT';
+    _classifyPipe(srcX, srcY) {
+        // Vertical Straight
+        if (srcX === 96 && srcY === 64) {
+            return { type: 'VERT', ports: [true, false, true, false] };
+        }
+        // Horizontal Straight
+        if ((srcX === 0 && srcY === 64) || (srcX === 32 && srcY === 96)) {
+            return { type: 'HORZ', ports: [false, true, false, true] };
+        }
+        // Corner: Right & Bottom
+        if (srcX === 64 && srcY === 128) {
+            return { type: 'CR_R', ports: [false, true, true, false] };
+        }
+        // Corner: Bottom & Left
+        if (srcX === 0 && srcY === 128) {
+            return { type: 'CR_L', ports: [false, false, true, true] };
+        }
+        // Corner: Top & Right
+        if (srcX === 32 && srcY === 128) {
+            return { type: 'CR_TR', ports: [true, true, false, false] };
+        }
+        // Corner: Top & Left
+        if (srcX === 64 && srcY === 96) {
+            return { type: 'CR_TL', ports: [true, false, false, true] };
+        }
+        // T-Junction: Top, Right, Left
+        if (srcX === 96 && srcY === 96) {
+            return { type: 'T_UP', ports: [true, true, false, true] };
+        }
+        // T-Junction: Right, Bottom, Left
+        if (srcX === 96 && srcY === 128) {
+            return { type: 'T_DOWN', ports: [false, true, true, true] };
+        }
+        // 4-Way Cross
+        if (srcY === 160) {
+            return { type: 'CROSS', ports: [true, true, true, true] };
+        }
+        return { type: 'VERT', ports: [true, false, true, false] };
     }
 
     /**
      * Complete physical and logical power evaluation across the entire facility network.
+     * Uses a generic 2D spatial grid BFS wavefront engine with cascade logic gate passes.
      */
     recalculatePower() {
-        if (!this.circuitSystem) return;
+        // Build 2D spatial grid index: Map<"gx,gy", Item[]>
+        const grid = new Map();
+        const addToGrid = (gx, gy, item) => {
+            const key = `${gx},${gy}`;
+            if (!grid.has(key)) grid.set(key, []);
+            grid.get(key).push(item);
+        };
 
-        const nodes = this.circuitSystem.nodes;
-        const node0 = nodes.get('dial_node_1488_144');
-        const node1 = nodes.get('dial_node_1776_144');
-        const node2 = nodes.get('dial_node_1808_144');
-        const node3 = nodes.get('dial_node_1840_144');
-        const node4 = nodes.get('dial_node_1872_144');
-
-        // 1. Ceiling Power Feed: (1472, 0..96) is ALWAYS energized from the facility generator
+        // 1. Index all pipes
         for (const p of this.pipes) {
-            if (p.x === 1472 && p.y <= 96) {
-                p.isPowered = true;
-                p.flowDir = { dx: 0, dy: 1 };
+            p.gx = p.gridX;
+            p.gy = p.gridY;
+            p.kind = 'PIPE';
+            p.isPowered = false;
+            p.flowDir = { dx: 0, dy: 1 };
+            addToGrid(p.gx, p.gy, p);
+        }
+
+        // 2. Index all circuit dials
+        const dials = [];
+        if (this.circuitSystem && this.circuitSystem.nodes) {
+            for (const node of this.circuitSystem.nodes.values()) {
+                const gx = Math.round((node.x - 16) / 32);
+                const gy = Math.round((node.y - 16) / 32);
+                node.gx = gx;
+                node.gy = gy;
+                node.kind = 'DIAL';
+                node.isPowered = (node.type === 'SOURCE');
+                dials.push(node);
+                addToGrid(gx, gy, node);
             }
         }
 
-        // 2. Dial 0 (CORNER at 1488, 144)
-        let dial0Powered = false;
-        let dial0OutputsRight = false;
-        if (node0) {
-            // Power enters from TOP port (touching pipe at 1472, 96)
-            if (node0.ports[PORT.TOP]) {
-                dial0Powered = true;
-                if (node0.ports[PORT.RIGHT]) {
-                    dial0OutputsRight = true;
+        // 3. Index all logic gates
+        const gates = [];
+        if (this.level && this.level.logicGates) {
+            for (const g of this.level.logicGates) {
+                const gx = Math.round(g.x / 32);
+                const gy = Math.round(g.y / 32);
+                g.gx = gx;
+                g.gy = gy;
+                g.kind = 'GATE';
+                g.isPowered = false;
+                g.isConflict = false;
+                g.inputSignals = new Map();
+
+                // Infer default ports if not specified
+                if (!g.inPorts) {
+                    if (g.type === 'AND' && gy <= 1) {
+                        g.inPorts = [PORT.LEFT, PORT.RIGHT];
+                    } else {
+                        g.inPorts = [PORT.LEFT, PORT.BOTTOM];
+                    }
                 }
-            }
-            node0.isPowered = dial0Powered;
-        }
-
-        // 3. Horizontal Exit Pipe (1504, 128) & Wall Conduit Bridge
-        const p1504 = this.pipes.find(p => p.x === 1504 && p.y === 128);
-        if (p1504) {
-            p1504.isPowered = dial0OutputsRight;
-            p1504.flowDir = { dx: 1, dy: 0 };
-        }
-        this.wallConduit.isPowered = dial0OutputsRight;
-
-        // 4. Dial 1 (T_SHAPE at 1776, 144)
-        let dial1Powered = false;
-        let dial1FeedsRight = false;
-        let dial1FeedsTop = false;
-        if (node1) {
-            if (this.wallConduit.isPowered && node1.ports[PORT.LEFT]) {
-                dial1Powered = true;
-                if (node1.ports[PORT.RIGHT]) dial1FeedsRight = true;
-                if (node1.ports[PORT.TOP]) dial1FeedsTop = true;
-            }
-            node1.isPowered = dial1Powered;
-        }
-
-        // 5. Dial 2 (T_SHAPE at 1808, 144)
-        let dial2Powered = false;
-        let dial2FeedsRight = false;
-        let dial2FeedsTop = false;
-        if (node2) {
-            if (dial1FeedsRight && node2.ports[PORT.LEFT]) {
-                dial2Powered = true;
-                if (node2.ports[PORT.RIGHT]) dial2FeedsRight = true;
-                if (node2.ports[PORT.TOP]) dial2FeedsTop = true;
-            }
-            node2.isPowered = dial2Powered;
-        }
-
-        // 6. Dial 3 (T_SHAPE at 1840, 144)
-        let dial3Powered = false;
-        let dial3FeedsRight = false;
-        let dial3FeedsTop = false;
-        if (node3) {
-            if (dial2FeedsRight && node3.ports[PORT.LEFT]) {
-                dial3Powered = true;
-                if (node3.ports[PORT.RIGHT]) dial3FeedsRight = true;
-                if (node3.ports[PORT.TOP]) dial3FeedsTop = true;
-            }
-            node3.isPowered = dial3Powered;
-        }
-
-        // 7. Dial 4 (CORNER at 1872, 144)
-        let dial4Powered = false;
-        let dial4FeedsTop = false;
-        if (node4) {
-            if (dial3FeedsRight && node4.ports[PORT.LEFT]) {
-                dial4Powered = true;
-                if (node4.ports[PORT.TOP]) dial4FeedsTop = true;
-            }
-            node4.isPowered = dial4Powered;
-        }
-
-        // 8. Gate Input Pipes & Logic Gates
-        // Dial 1 feed into OR Gate 1 left: pipe (1760, 96) and corner (1760, 64)
-        const p1760_96 = this.pipes.find(p => p.x === 1760 && p.y === 96);
-        const p1760_64 = this.pipes.find(p => p.x === 1760 && p.y === 64);
-        if (p1760_96) {
-            p1760_96.isPowered = dial1FeedsTop;
-            p1760_96.flowDir = { dx: 0, dy: -1 };
-        }
-        if (p1760_64) {
-            p1760_64.isPowered = dial1FeedsTop;
-            p1760_64.flowDir = { dx: 1, dy: 0 };
-        }
-
-        // Dial 2 feed into OR Gate 1 bottom: pipe (1792, 96)
-        const p1792_96 = this.pipes.find(p => p.x === 1792 && p.y === 96);
-        if (p1792_96) {
-            p1792_96.isPowered = dial2FeedsTop;
-            p1792_96.flowDir = { dx: 0, dy: -1 };
-        }
-
-        // OR Gate 1 at (1792, 64)
-        const orGate1Active = dial1FeedsTop || dial2FeedsTop;
-        if (this.level && this.level.logicGates) {
-            const g1 = this.level.logicGates.find(g => g.x === 1792 && g.y === 64);
-            if (g1) g1.isPowered = orGate1Active;
-        }
-
-        // OR Gate 1 output pipe: corner (1792, 32)
-        const p1792_32 = this.pipes.find(p => p.x === 1792 && p.y === 32);
-        if (p1792_32) {
-            p1792_32.isPowered = orGate1Active;
-            p1792_32.flowDir = { dx: 1, dy: 0 };
-        }
-
-        // Dial 3 feed into OR Gate 2 left: pipe (1824, 96) and corner (1824, 64)
-        const p1824_96 = this.pipes.find(p => p.x === 1824 && p.y === 96);
-        const p1824_64 = this.pipes.find(p => p.x === 1824 && p.y === 64);
-        if (p1824_96) {
-            p1824_96.isPowered = dial3FeedsTop;
-            p1824_96.flowDir = { dx: 0, dy: -1 };
-        }
-        if (p1824_64) {
-            p1824_64.isPowered = dial3FeedsTop;
-            p1824_64.flowDir = { dx: 1, dy: 0 };
-        }
-
-        // Dial 4 feed into OR Gate 2 bottom: pipe (1856, 96)
-        const p1856_96 = this.pipes.find(p => p.x === 1856 && p.y === 96);
-        if (p1856_96) {
-            p1856_96.isPowered = dial4FeedsTop;
-            p1856_96.flowDir = { dx: 0, dy: -1 };
-        }
-
-        // OR Gate 2 at (1856, 64)
-        const orGate2Active = dial3FeedsTop || dial4FeedsTop;
-        if (this.level && this.level.logicGates) {
-            const g2 = this.level.logicGates.find(g => g.x === 1856 && g.y === 64);
-            if (g2) g2.isPowered = orGate2Active;
-        }
-
-        // OR Gate 2 output pipe: corner (1856, 32)
-        const p1856_32 = this.pipes.find(p => p.x === 1856 && p.y === 32);
-        if (p1856_32) {
-            p1856_32.isPowered = orGate2Active;
-            p1856_32.flowDir = { dx: -1, dy: 0 };
-        }
-
-        // AND Gate at (1824, 32)
-        const andGateActive = orGate1Active && orGate2Active;
-        if (this.level && this.level.logicGates) {
-            const gAnd = this.level.logicGates.find(g => g.x === 1824 && g.y === 32);
-            if (gAnd) gAnd.isPowered = andGateActive;
-        }
-
-        // 9. Output Trunk Pipes to Blast Door
-        // Corner (1824, 0)
-        const p1824_0 = this.pipes.find(p => p.x === 1824 && p.y === 0);
-        if (p1824_0) {
-            p1824_0.isPowered = andGateActive;
-            p1824_0.flowDir = { dx: 1, dy: 0 };
-        }
-
-        // Horizontal crossbar (1856, 0)
-        const p1856_0 = this.pipes.find(p => p.x === 1856 && p.y === 0);
-        if (p1856_0) {
-            p1856_0.isPowered = andGateActive;
-            p1856_0.flowDir = { dx: 1, dy: 0 };
-        }
-
-        // Corner (1888, 0)
-        const p1888_0 = this.pipes.find(p => p.x === 1888 && p.y === 0);
-        if (p1888_0) {
-            p1888_0.isPowered = andGateActive;
-            p1888_0.flowDir = { dx: 0, dy: 1 };
-        }
-
-        // Vertical trunk line: (1888, 32), (1888, 64), (1888, 96)
-        for (const y of [32, 64, 96]) {
-            const p = this.pipes.find(pipe => pipe.x === 1888 && pipe.y === y);
-            if (p) {
-                p.isPowered = andGateActive;
-                p.flowDir = { dx: 0, dy: 1 };
+                if (!g.outPorts) {
+                    g.outPorts = [PORT.TOP];
+                }
+                g.ports = [true, true, true, true];
+                gates.push(g);
+                addToGrid(gx, gy, g);
             }
         }
 
-        // 10. Status Light Box at (1888, 128)
+        // 4. Index all interactive & status devices
+        const devices = [];
+
+        // Power Sources
+        const sources = [];
+        if (this.level && this.level.powerSources) {
+            for (const s of this.level.powerSources) {
+                const sgx = Math.round(s.x / 32);
+                const sgy = Math.round(s.y / 32);
+                s.gx = sgx;
+                s.gy = sgy;
+                s.kind = 'SOURCE';
+                s.isPowered = true;
+                s.ports = [true, true, true, true];
+                sources.push(s);
+                addToGrid(sgx, sgy, s);
+            }
+        }
+
+        // Hazards (only authentic hazard entities, never plain walls)
+        if (this.level && this.level.colliders) {
+            const hazards = this.level.colliders.filter(c => c.isHazard === true);
+            for (const haz of hazards) {
+                haz.kind = 'HAZARD';
+                haz.isPowered = false;
+                haz.ports = [true, true, true, true];
+                // Cover all grid tiles the hazard intersects
+                const minGx = Math.floor(haz.x / 32);
+                const maxGx = Math.floor((haz.x + haz.width - 1) / 32);
+                const minGy = Math.floor(haz.y / 32);
+                const maxGy = Math.floor((haz.y + haz.height - 1) / 32);
+                haz.gx = minGx;
+                haz.gy = minGy;
+                for (let x = minGx; x <= maxGx; x++) {
+                    for (let y = minGy; y <= maxGy; y++) {
+                        addToGrid(x, y, haz);
+                    }
+                }
+                devices.push(haz);
+            }
+        }
+
+        // Blast Doors
+        const doorList = (this.level && this.level.doors && this.level.doors.length > 0)
+            ? this.level.doors
+            : (this.level && this.level.door ? [this.level.door] : []);
+
+        for (const door of doorList) {
+            const dgx = Math.round(door.x / 32);
+            const dgy = Math.round(door.y / 32);
+            const numTiles = Math.max(1, Math.round(door.height / 32));
+            for (let ty = 0; ty < numTiles; ty++) {
+                const doorTileObj = {
+                    kind: 'DOOR',
+                    raw: door,
+                    gx: dgx,
+                    gy: dgy + ty,
+                    isPowered: false,
+                    ports: [true, true, true, true]
+                };
+                addToGrid(dgx, dgy + ty, doorTileObj);
+                devices.push(doorTileObj);
+            }
+        }
+
+        // Light Boxes
         if (this.level && this.level.lightBoxes) {
             for (const box of this.level.lightBoxes) {
-                box.isPowered = andGateActive;
+                const bgx = Math.round(box.x / 32);
+                const bgy = Math.round(box.y / 32);
+                box.gx = bgx;
+                box.gy = bgy;
+                box.kind = 'DEVICE';
+                box.isPowered = false;
+                box.ports = [true, true, true, true];
+                addToGrid(bgx, bgy, box);
+                devices.push(box);
             }
         }
 
-        // 11. Facility Blast Door at (1888, 160)
-        if (this.level && this.level.door) {
-            if (andGateActive) {
-                if (!this.level.door.isOpen) {
-                    this.level.door.isOpen = true;
-                    if (this.eventBus) this.eventBus.emit('ACTIVATE_DEVICE', 'exit_door');
+        // 5. Seed BFS Queue from all active power sources
+        const queue = [];
+
+        // Explicit power source entities
+        for (const s of sources) {
+            queue.push(s);
+        }
+
+        // Facility ceiling generator feeds (any pipe descending at gy === 0 or gy === -10)
+        for (const p of this.pipes) {
+            if ((p.gy === 0 || p.gy === -10) && p.ports[PORT.TOP]) {
+                p.isPowered = true;
+                p.flowDir = { dx: 0, dy: 1 };
+                queue.push(p);
+            }
+        }
+
+        // Source dials
+        for (const d of dials) {
+            if (d.type === 'SOURCE') {
+                d.isPowered = true;
+                queue.push(d);
+            }
+        }
+
+        // 6. Iterative Wavefront Propagation & Cascade Loop
+        let pass = 0;
+        let changed = true;
+
+        while (changed && pass++ < 10) {
+            changed = false;
+
+            // BFS Wavefront
+            while (queue.length > 0) {
+                const curr = queue.shift();
+                const allowedPorts = (curr.kind === 'GATE') ? curr.outPorts : [0, 1, 2, 3];
+
+                for (const p of allowedPorts) {
+                    if (!curr.ports[p]) continue;
+
+                    const nx = curr.gx + PORT_DELTAS[p].dx;
+                    const ny = curr.gy + PORT_DELTAS[p].dy;
+                    const opp = OPPOSITE_PORT[p];
+                    const neighbors = grid.get(`${nx},${ny}`) || [];
+
+                    for (const neighbor of neighbors) {
+                        if (neighbor === curr) continue;
+
+                        if (neighbor.kind === 'GATE') {
+                            if (neighbor.inPorts.includes(opp)) {
+                                if (!neighbor.inputSignals.has(opp)) {
+                                    neighbor.inputSignals.set(opp, true);
+                                    changed = true;
+                                }
+                            }
+                        } else if (neighbor.kind === 'HAZARD') {
+                            if (!neighbor.isPowered) {
+                                neighbor.isPowered = true;
+                                changed = true;
+                            }
+                        } else if (neighbor.kind === 'DOOR' || neighbor.kind === 'DEVICE') {
+                            if (!neighbor.isPowered) {
+                                neighbor.isPowered = true;
+                                queue.push(neighbor);
+                                changed = true;
+                            }
+                        } else if (neighbor.ports && neighbor.ports[opp]) {
+                            // Valid matching port connection across conduit/dial
+                            if (!neighbor.isPowered) {
+                                neighbor.isPowered = true;
+                                if (neighbor.kind === 'PIPE') {
+                                    neighbor.flowDir = { dx: PORT_DELTAS[p].dx, dy: PORT_DELTAS[p].dy };
+                                }
+                                queue.push(neighbor);
+                                changed = true;
+                            }
+                        }
+                    }
                 }
-            } else {
-                if (this.level.door.isOpen) {
-                    this.level.door.isOpen = false;
-                    if (this.eventBus) this.eventBus.emit('DEACTIVATE_DEVICE', 'exit_door');
+            }
+
+            // Gate Cascade Evaluation
+            for (const g of gates) {
+                const activeCount = g.inputSignals.size;
+                let active = false;
+
+                if (g.type === 'AND') {
+                    active = (activeCount >= 2);
+                } else if (g.type === 'OR' || g.type === 'XOR') {
+                    // Exclusive OR per facility specification: exactly 1 input active = ON; 2 inputs = OFF/CONFLICT
+                    if (activeCount === 1) {
+                        active = true;
+                        g.isConflict = false;
+                    } else if (activeCount >= 2) {
+                        active = false;
+                        g.isConflict = true; // Overloaded conflict state
+                    } else {
+                        active = false;
+                        g.isConflict = false;
+                    }
+                } else if (g.type === 'NOT') {
+                    active = (activeCount === 0);
+                } else if (g.type === 'NAND') {
+                    active = (activeCount < 2);
+                } else if (g.type === 'NOR') {
+                    active = (activeCount === 0);
+                }
+
+                if (active !== g.isPowered) {
+                    g.isPowered = active;
+                    changed = true;
+                    if (active) {
+                        queue.push(g);
+                    }
+                }
+            }
+        }
+
+        // 7. Synchronize Global Level Devices
+        // Hazards: Security grid cutoff logic -> active/electrified by default; turned off when circuit delivers power to cutoff terminal
+        if (this.level && this.level.colliders) {
+            const hazards = this.level.colliders.filter(c => c.isHazard === true);
+            for (const haz of hazards) {
+                let isCutoffPowered = false;
+                if (haz.cutoffBoxId && this.level.lightBoxes) {
+                    const box = this.level.lightBoxes.find(b => b.id === haz.cutoffBoxId);
+                    if (box) isCutoffPowered = Boolean(box.isPowered);
+                } else if (haz.isPowered !== undefined) {
+                    isCutoffPowered = Boolean(haz.isPowered);
+                }
+
+                // Security grid laser starts ON; powering cutoff turns it OFF
+                const shouldElectrify = !isCutoffPowered;
+                if (haz.isElectrified !== shouldElectrify) {
+                    haz.isElectrified = shouldElectrify;
+                    if (this.eventBus) {
+                        this.eventBus.emit(shouldElectrify ? 'ACTIVATE_DEVICE' : 'DEACTIVATE_DEVICE', haz.deviceId || 'shaft_hazard');
+                    }
+                }
+            }
+        }
+
+        // Blast Doors Synchronization across all rooms
+        const handledDoors = new Set();
+        for (const dev of devices) {
+            if (dev.kind === 'DOOR' && dev.raw && !handledDoors.has(dev.raw.id)) {
+                handledDoors.add(dev.raw.id);
+                // Door is considered powered if ANY of its vertical segments received power OR if linked controlBox is powered
+                let shouldOpen = false;
+                if (dev.raw.controlBoxId && this.level.lightBoxes) {
+                    const box = this.level.lightBoxes.find(b => b.id === dev.raw.controlBoxId);
+                    if (box && box.isPowered) shouldOpen = true;
+                }
+                if (!shouldOpen) {
+                    const allSegments = devices.filter(d => d.kind === 'DOOR' && d.raw && d.raw.id === dev.raw.id);
+                    shouldOpen = allSegments.some(s => Boolean(s.isPowered));
+                }
+                if (dev.raw.isOpen !== shouldOpen) {
+                    dev.raw.isOpen = shouldOpen;
+                    if (this.eventBus) {
+                        this.eventBus.emit(shouldOpen ? 'ACTIVATE_DEVICE' : 'DEACTIVATE_DEVICE', dev.raw.id);
+                    }
                 }
             }
         }
@@ -352,31 +496,37 @@ export class PipeSystem {
         });
     }
 
-    render(ctx) {
+    render(ctx, camera = null) {
         ctx.save();
 
         const sheet = this.assetLoader ? this.assetLoader.getImage('circuits_sheet') : null;
 
-        // 1. Render recessed wall conduit bridge across Chamber 1 and 2
-        this._renderWallConduit(ctx);
-
-        // 2. Render base metallic pipe tiles
+        // 1. Render base metallic pipe tiles
         if (sheet) {
             ctx.imageSmoothingEnabled = false;
             for (const p of this.pipes) {
+                if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(p.x, p.y, 32, 32, 32)) {
+                    continue;
+                }
                 ctx.drawImage(sheet, p.srcX, p.srcY, 32, 32, Math.round(p.x), Math.round(p.y), 32, 32);
             }
         }
 
-        // 3. Render powered internal conduit lumens & traveling light pulses
+        // 2. Render powered internal conduit lumens & traveling light pulses
         for (const p of this.pipes) {
             if (p.isPowered) {
+                if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(p.x, p.y, 32, 32, 32)) {
+                    continue;
+                }
                 this._renderPoweredPipe(ctx, p);
             }
         }
 
-        // 4. Render micro-sparks
+        // 3. Render micro-sparks
         for (const sp of this.sparks) {
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(sp.x, sp.y, 2, 2, 32)) {
+                continue;
+            }
             ctx.fillStyle = sp.color;
             ctx.fillRect(Math.round(sp.x), Math.round(sp.y), 2, 2);
         }
@@ -384,47 +534,84 @@ export class PipeSystem {
         ctx.restore();
     }
 
-    _renderWallConduit(ctx) {
-        const c = this.wallConduit;
+    _renderHazardTerminalConduit(ctx) {
+        const c = this.leftHazardConduit;
         const y = c.y;
 
         ctx.save();
-        // Recessed armored conduit casing behind platforms
+        // Armored conduit from Dial 0 pipe (1504) to shaft hazard terminal (1536)
         ctx.fillStyle = '#121720';
         ctx.fillRect(c.x1, y - 2, c.x2 - c.x1, 4);
         ctx.strokeStyle = '#222d3d';
         ctx.lineWidth = 1;
         ctx.strokeRect(c.x1, y - 2, c.x2 - c.x1, 4);
 
-        // Mounting clamps every 32px
-        ctx.fillStyle = '#313d52';
-        for (let cx = c.x1 + 16; cx < c.x2; cx += 32) {
-            ctx.fillRect(cx - 2, y - 4, 4, 8);
-        }
+        // Terminal mounting plate at hazard base (1536, 144)
+        ctx.fillStyle = '#222b3a';
+        ctx.fillRect(c.x2 - 3, y - 6, 6, 12);
+        ctx.strokeStyle = '#38475e';
+        ctx.strokeRect(c.x2 - 3, y - 6, 6, 12);
 
         if (c.isPowered) {
-            // Molten golden conduit core
-            ctx.shadowColor = '#ffaa00';
-            ctx.shadowBlur = 6;
-            ctx.strokeStyle = '#ffbb00';
-            ctx.lineWidth = 2.4;
-            ctx.beginPath();
-            ctx.moveTo(c.x1, y);
-            ctx.lineTo(c.x2, y);
-            ctx.stroke();
-
-            // High-voltage traveling pulse packets
-            ctx.shadowBlur = 0;
-            ctx.setLineDash([8, 16]);
-            ctx.lineDashOffset = -this.pulseTimer * 38;
-            ctx.strokeStyle = '#ffffff';
+            // Power active: lead wire to hazard terminal
+            ctx.strokeStyle = '#cc3344';
             ctx.lineWidth = 2.0;
             ctx.beginPath();
             ctx.moveTo(c.x1, y);
             ctx.lineTo(c.x2, y);
             ctx.stroke();
-            ctx.setLineDash([]);
+
+            // Terminal status diode: red = energized / dangerous
+            ctx.fillStyle = '#cc2233';
+            ctx.beginPath();
+            ctx.arc(c.x2, y, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Power cut off: hazard offline and safe for climbing
+            ctx.strokeStyle = '#182433';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.moveTo(c.x1, y);
+            ctx.lineTo(c.x2, y);
+            ctx.stroke();
+
+            // Terminal status diode: green = offline / safe
+            ctx.fillStyle = '#00aa55';
+            ctx.beginPath();
+            ctx.arc(c.x2, y, 2.5, 0, Math.PI * 2);
+            ctx.fill();
         }
+
+        ctx.restore();
+    }
+
+    _renderCeilingGeneratorFixture(ctx) {
+        ctx.save();
+        // Chamber 2 Ceiling Power Substation Intake Fixture at (1728, 0)
+        const gx = 1728;
+        const gy = 0;
+
+        ctx.fillStyle = '#161e2a';
+        ctx.fillRect(gx - 4, gy, 40, 14);
+        ctx.strokeStyle = '#314157';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(gx - 4, gy, 40, 14);
+
+        // Substation label badge
+        ctx.fillStyle = '#4f6889';
+        ctx.font = '6px monospace';
+        ctx.fillText('PWR-02', gx - 1, gy + 10);
+
+        // Solid amber facility generator diode
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(gx + 28, gy + 7, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(gx + 28, gy + 7, 1.0, 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.restore();
     }
@@ -445,15 +632,25 @@ export class PipeSystem {
             ctx.moveTo(x, y + 16);
             ctx.lineTo(x + 32, y + 16);
         } else if (pipe.type === 'CR_R') {
-            // Right to bottom corner (turns from bottom to right or right to bottom)
+            // Right to bottom corner
             ctx.moveTo(x + 16, y + 32);
             ctx.lineTo(x + 16, y + 16);
             ctx.lineTo(x + 32, y + 16);
         } else if (pipe.type === 'CR_L') {
-            // Left to bottom corner (turns from left to bottom or bottom to left)
+            // Left to bottom corner
             ctx.moveTo(x, y + 16);
             ctx.lineTo(x + 16, y + 16);
             ctx.lineTo(x + 16, y + 32);
+        } else if (pipe.type === 'CR_TR') {
+            // Top to right corner
+            ctx.moveTo(x + 16, y);
+            ctx.lineTo(x + 16, y + 16);
+            ctx.lineTo(x + 32, y + 16);
+        } else if (pipe.type === 'CR_TL') {
+            // Top to left corner
+            ctx.moveTo(x + 16, y);
+            ctx.lineTo(x + 16, y + 16);
+            ctx.lineTo(x, y + 16);
         } else {
             ctx.moveTo(x + 16, y);
             ctx.lineTo(x + 16, y + 32);
@@ -501,4 +698,3 @@ export class PipeSystem {
         ctx.restore();
     }
 }
-

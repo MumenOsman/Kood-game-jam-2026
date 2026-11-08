@@ -5,108 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tether Platformer - 2D Pacifist Puzzle Adventure</title>
     <style>
+        @font-face {
+            font-family: 'CyberpunkPixel';
+            src: url('./assets/ui/font/CyberpunkCraftpixPixel.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             user-select: none;
+            -webkit-user-select: none;
         }
 
         body {
-            background-color: #080a0e;
-            color: #d8e2ec;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0b0e14;
+            color: #c4d1de;
+            font-family: 'CyberpunkPixel', monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
             overflow: hidden;
-        }
-
-        header {
-            margin-bottom: 8px;
-            text-align: center;
-        }
-
-        h1 {
-            font-size: 1.3rem;
-            letter-spacing: 2px;
-            color: #ffaa00;
-            text-transform: uppercase;
-            font-family: monospace;
-            text-shadow: 0 0 10px rgba(255, 170, 0, 0.4);
-        }
-
-        .subtitle {
-            font-size: 0.82rem;
-            color: #788a9e;
-            font-family: monospace;
+            cursor: url('./assets/ui/cursors/cursor_default.png'), auto;
         }
 
         #gameContainer {
             position: relative;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 170, 0, 0.15);
-            border: 2px solid #283240;
-            border-radius: 6px;
-            overflow: hidden;
+            border: 4px solid #1c2433;
+            border-radius: 4px;
             background: #000;
+            image-rendering: pixelated;
         }
 
         canvas {
             display: block;
             width: 1280px;
             height: 720px;
-            image-rendering: auto;
-        }
-
-        footer {
-            margin-top: 10px;
-            display: flex;
-            gap: 24px;
-            font-size: 0.78rem;
-            font-family: monospace;
-            color: #8c9ba5;
-            background: rgba(18, 24, 32, 0.85);
-            padding: 6px 16px;
-            border-radius: 4px;
-            border: 1px solid #222d3b;
-        }
-
-        .key-badge {
-            display: inline-block;
-            background: #2a3647;
-            color: #ffdd88;
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-            border: 1px solid #3c4e66;
-            margin-right: 4px;
+            image-rendering: pixelated;
+            cursor: url('./assets/ui/cursors/cursor_default.png'), auto;
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>TETHER PLATFORMER</h1>
-        <div class="subtitle">Core Architecture Prototype - Pacifist Energy Restoration</div>
-    </header>
-
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
     </div>
 
-    <footer>
-        <div><span class="key-badge">A / D</span> Move</div>
-        <div><span class="key-badge">Shift</span> Run</div>
-        <div><span class="key-badge">Space</span> Jump / Wall Jump</div>
-        <div><span class="key-badge">S</span> Dock (ground) / Fast Slide (wall)</div>
-        <div><span class="key-badge">LMB</span> Shoot Wire</div>
-        <div><span class="key-badge">RMB</span> Cut Wire</div>
-        <div><span class="key-badge">W / S</span> Reel Cable</div>
-        <div><span class="key-badge">E</span> Rotate Junction</div>
-    </footer>
-
-    <script type="module" src="./src/main.js?v=20261107_v7"></script>
+    <script type="module" src="./src/main.js?v=20261108_v2"></script>
 </body>
 </html>
 

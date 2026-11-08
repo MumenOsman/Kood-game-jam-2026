@@ -12,19 +12,18 @@ export class WireSystem {
         this.player = player;
         this.level = level;
 
-        // Constants (Strictly locked to max 3 squares = 96px)
-        this.wireLengthSquares = 3.0; // 3 squares (3 x 32px)
+        // Constants (Calibrated to 2.5 squares = 80px)
+        this.wireLengthSquares = 2.5; // 2.5 squares (2.5 x 32px)
         this.MIN_WIRE_LENGTH = 20;
         this.MIN_THROW_SPEED = 1400;
         this.MAX_THROW_SPEED = 1400; // Straight, snappy projectile speed towards mouse cursor
         this.PROJECTILE_GRAVITY = 0; // Pure straight trajectory matching mouse aim
-        this.REEL_SPEED = 140; // px/s for climbing W/S
+        this.REEL_SPEED = 120; // px/s for climbing W/S
 
         // Plug projectile state
         this.projectile = null; // { x, y, vx, vy, life }
 
         // Visual effects
-        this.sparkParticles = [];
         this.electricPhase = 0;
 
         // Listen for detach requests (e.g. Tether Jump from PlayerMovement)
@@ -64,13 +63,11 @@ export class WireSystem {
             this._updateTetherPhysics(dt, head);
         }
 
-        // 5. Right-Click manual wire cut (no boost)
-        if (this.input.rightPressedThisFrame && (p.isTethered || this.projectile)) {
+        // 5. Manual wire cut (RMB / custom cut binding)
+        const cutTriggered = this.input.isActionPressed ? this.input.isActionPressed('cutWire') : this.input.rightPressedThisFrame;
+        if (cutTriggered && (p.isTethered || this.projectile)) {
             this.disconnectWire();
         }
-
-        // 6. Update visual spark particles
-        this._updateSparks(dt);
     }
 
     _updateSocketHighlights(head) {
@@ -89,8 +86,10 @@ export class WireSystem {
             p.shootTimer = Math.max(0, p.shootTimer - dt);
         }
 
-        // Single click LMB fires wire projectile immediately
-        if (this.input.leftPressedThisFrame && !p.isTethered && !this.projectile) {
+        // Single click LMB (or custom shoot binding) fires wire projectile immediately (unless clicking an interactive drone)
+        const shootTriggered = this.input.isActionPressed ? this.input.isActionPressed('shootWire') : this.input.leftPressedThisFrame;
+        const isHoveringDrone = this.level && this.level.drones && this.level.drones.some(d => d.isHovered);
+        if (shootTriggered && !p.isTethered && !this.projectile && !isHoveringDrone) {
             const dx = this.input.mouseWorld.x - (p.x + p.width / 2);
             if (Math.abs(dx) > 4) {
                 p.facing = dx >= 0 ? 1 : -1;
@@ -172,7 +171,6 @@ export class WireSystem {
         p.tetherLength = Math.hypot(socket.x - head.x, socket.y - head.y);
         socket.isPlugged = true;
 
-        this._spawnSparks(socket.x, socket.y, '#ffaa00', 12);
         this.eventBus.emit('WIRE_CONNECTED', socket);
     }
 
@@ -180,7 +178,6 @@ export class WireSystem {
         const p = this.player;
         if (p.tetherSocket) {
             p.tetherSocket.isPlugged = false;
-            this._spawnSparks(p.tetherSocket.x, p.tetherSocket.y, '#00ddff', 8);
             this.eventBus.emit('WIRE_DISCONNECTED', p.tetherSocket);
         }
 
@@ -200,7 +197,13 @@ export class WireSystem {
 
         // 1. Reel in/out with W / S keys
         if (this.input.moveUp) {
-            p.tetherLength = Math.max(this.MIN_WIRE_LENGTH, p.tetherLength - this.REEL_SPEED * dt);
+            const minAllowed = (sock.type === 'CIRCUIT' || sock.isInsideSolid) ? 36 : this.MIN_WIRE_LENGTH;
+            if (p.isGrounded) {
+                // Ground safety: tether length cannot shrink below current physical distance
+                p.tetherLength = Math.max(currentDist, p.tetherLength - this.REEL_SPEED * dt);
+            } else {
+                p.tetherLength = Math.max(minAllowed, p.tetherLength - this.REEL_SPEED * dt);
+            }
         }
         if (this.input.moveDown && !p.isGrounded) {
             p.tetherLength = Math.min(this.MAX_WIRE_LENGTH, p.tetherLength + this.REEL_SPEED * dt);
@@ -213,6 +216,38 @@ export class WireSystem {
                 return;
             }
         } else {
+            // Directional swing pumping (Brawlhalla / SpeedRunners feel):
+            // Holding directional key accelerates / pumps the swing along the circular tangent!
+            let horizontalIntent = 0;
+            if (this.input.moveLeft) horizontalIntent -= 1;
+            if (this.input.moveRight) horizontalIntent += 1;
+
+            if (horizontalIntent !== 0 && currentDist > 0.001 && ry > 0) {
+                // Unit normal from socket to player
+                const nx = rx / currentDist;
+                const ny = ry / currentDist;
+
+                // Tangent vector pointing in positive horizontal direction (clockwise when hanging below)
+                // Note: ny > 0 when player is below socket
+                const pumpX = horizontalIntent * ny;
+                const pumpY = horizontalIntent * (-nx);
+
+                // Additive pump acceleration
+                const SWING_PUMP_ACCEL = 420; // px/s² (smooth and controlled)
+                p.vx += pumpX * SWING_PUMP_ACCEL * dt;
+                p.vy += pumpY * SWING_PUMP_ACCEL * dt;
+
+                p.facing = horizontalIntent;
+
+                // Speed cap for natural control
+                const MAX_SWING_SPEED = 400; // px/s
+                const currentSpeed = Math.hypot(p.vx, p.vy);
+                if (currentSpeed > MAX_SWING_SPEED) {
+                    p.vx = (p.vx / currentSpeed) * MAX_SWING_SPEED;
+                    p.vy = (p.vy / currentSpeed) * MAX_SWING_SPEED;
+                }
+            }
+
             // 3. Mid-air Pendulum Distance Constraint
             if (currentDist > p.tetherLength && currentDist > 0.001) {
                 const nx = rx / currentDist;
@@ -223,8 +258,78 @@ export class WireSystem {
                 const desiredHeadY = sock.y + ny * p.tetherLength;
 
                 const headOffset = p.getHeadSocket();
-                p.x += (desiredHeadX - headOffset.x);
-                p.y += (desiredHeadY - headOffset.y);
+                const deltaX = desiredHeadX - headOffset.x;
+                const deltaY = desiredHeadY - headOffset.y;
+
+                // Collision-safe position resolution against solid tiles
+                const colliders = this.level ? this.level.getSolidColliders() : [];
+
+                // 1. Move X with genuine vertical overlap check
+                const prevX = p.x;
+                p.x += deltaX;
+                if (deltaX > 0) {
+                    for (const col of colliders) {
+                        if (p.y < col.y + col.height && p.y + p.height > col.y) {
+                            if (prevX + p.width <= col.x && p.x + p.width > col.x) {
+                                p.x = col.x - p.width;
+                            }
+                        }
+                    }
+                } else if (deltaX < 0) {
+                    for (const col of colliders) {
+                        if (p.y < col.y + col.height && p.y + p.height > col.y) {
+                            if (prevX >= col.x + col.width && p.x < col.x + col.width) {
+                                p.x = col.x + col.width;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Move Y with genuine horizontal overlap check
+                const prevY = p.y;
+                p.y += deltaY;
+                if (deltaY > 0) {
+                    for (const col of colliders) {
+                        if (p.x < col.x + col.width && p.x + p.width > col.x) {
+                            if (prevY + p.height <= col.y && p.y + p.height > col.y) {
+                                p.y = col.y - p.height;
+                            }
+                        }
+                    }
+                } else if (deltaY < 0) {
+                    for (const col of colliders) {
+                        if (p.x < col.x + col.width && p.x + p.width > col.x) {
+                            if (prevY >= col.y + col.height && p.y < col.y + col.height) {
+                                p.y = col.y + col.height;
+                            }
+                        }
+                    }
+                }
+
+                // 3. Fallback MTV for any residual penetration
+                let bounds = p.getBounds();
+                for (const col of colliders) {
+                    if (this._checkAABB(bounds, col)) {
+                        const overlapLeft = (p.x + p.width) - col.x;
+                        const overlapRight = (col.x + col.width) - p.x;
+                        const overlapTop = (p.y + p.height) - col.y;
+                        const overlapBottom = (col.y + col.height) - p.y;
+                        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                        if (minOverlap === overlapTop) p.y = col.y - p.height;
+                        else if (minOverlap === overlapBottom) p.y = col.y + col.height;
+                        else if (minOverlap === overlapLeft) p.x = col.x - p.width;
+                        else p.x = col.x + col.width;
+                        bounds = p.getBounds();
+                    }
+                }
+
+                // If player was stopped by solid geometry, clamp tetherLength to actual contact distance
+                // so the rope doesn't keep pulling the player through the wall
+                const finalHead = p.getHeadSocket();
+                const actualDist = Math.hypot(sock.x - finalHead.x, sock.y - finalHead.y);
+                if (actualDist > p.tetherLength) {
+                    p.tetherLength = Math.max(p.tetherLength, actualDist);
+                }
 
                 // Velocity constraint: eliminate outward radial velocity
                 const vRadial = p.vx * nx + p.vy * ny;
@@ -240,31 +345,13 @@ export class WireSystem {
         }
     }
 
-    _spawnSparks(x, y, color, count = 8) {
-        for (let i = 0; i < count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 60 + Math.random() * 140;
-            this.sparkParticles.push({
-                x, y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                color,
-                life: 0.35 + Math.random() * 0.25
-            });
-        }
-    }
-
-    _updateSparks(dt) {
-        for (let i = this.sparkParticles.length - 1; i >= 0; i--) {
-            const sp = this.sparkParticles[i];
-            sp.x += sp.vx * dt;
-            sp.y += sp.vy * dt;
-            sp.vy += 400 * dt;
-            sp.life -= dt;
-            if (sp.life <= 0) {
-                this.sparkParticles.splice(i, 1);
-            }
-        }
+    _checkAABB(rectA, rectB) {
+        return (
+            rectA.x < rectB.x + rectB.width &&
+            rectA.x + rectA.width > rectB.x &&
+            rectA.y < rectB.y + rectB.height &&
+            rectA.y + rectA.height > rectB.y
+        );
     }
 
     render(ctx) {
@@ -276,15 +363,9 @@ export class WireSystem {
             this._renderProjectile(ctx, head);
         }
 
-        // 3. Draw Connected Tether Wire
+        // 2. Draw Connected Tether Wire
         if (p.isTethered && p.tetherSocket) {
             this._renderTetherWire(ctx, head, p.tetherSocket);
-        }
-
-        // 4. Draw Spark Particles
-        for (const sp of this.sparkParticles) {
-            ctx.fillStyle = sp.color;
-            ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
         }
     }
 
@@ -391,15 +472,6 @@ export class WireSystem {
             ctx.strokeStyle = '#fff5a0';
             ctx.lineWidth = 1.2;
             ctx.stroke();
-
-            // Energy pulse effect traveling from socket to head
-            const t = (Math.sin(this.electricPhase) + 1) / 2;
-            const pulseX = socket.x + (head.x - socket.x) * t;
-            const pulseY = socket.y + (head.y - socket.y) * t;
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(pulseX, pulseY, 3, 0, Math.PI * 2);
-            ctx.fill();
         } else {
             // Slack wire: quadratic Bezier curve with gravity sag
             const midX = (head.x + socket.x) / 2;

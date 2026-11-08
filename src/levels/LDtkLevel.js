@@ -4,10 +4,10 @@
  * greedy collider merging, responsive canvas scaling, and interactive entities:
  * Drones, Sockets, Wall-runs, Hazards, and Blast Doors.
  */
-import { Level } from './Level.js?v=20261107_v6';
-import { Socket } from '../entities/Socket.js?v=20261107_v6';
-import { Drone } from '../entities/Drone.js?v=20261107_v6';
-import { NODE_DESIGNS } from '../modules/CircuitSystem.js?v=20261107_v6';
+import { Level } from './Level.js?v=20261107_v8';
+import { Socket } from '../entities/Socket.js?v=20261107_v8';
+import { Drone } from '../entities/Drone.js?v=20261107_v9';
+import { PORT, NODE_DESIGNS } from '../modules/CircuitSystem.js?v=20261107_v8';
 
 export class LDtkLevel extends Level {
     constructor(eventBus, circuitSystem, options = {}) {
@@ -21,31 +21,29 @@ export class LDtkLevel extends Level {
         // Multi-room world layout
         this.roomWidth = 640;
         this.roomHeight = 320;
-        this.totalRooms = 3;
+        this.totalRooms = 4;
         this.activeRoomIndex = 0;
 
-        this.width = this.roomWidth * this.totalRooms; // 1920 px
+        this.width = this.roomWidth * this.totalRooms; // 2560 px
         this.height = this.roomHeight; // 320 px
         this.spawnPoint = { x: 64, y: 160 };
 
-        // Room composite images
+        // Zero-GC collider caches
+        this._staticSolidColliders = null;
+        this._activeSolidCollidersList = [];
+
+        // Room composite images & background
         this.roomImages = [];
+        this.backgroundImage = null;
+        this.bgPath = './assets/backgrounds/factory_bg.png';
         this.drones = [];
         this.logicGates = [];
         this.lightBoxes = [];
         this.pipes = [];
 
-        // Exit Blast Door
-        this.door = {
-            id: 'exit_door',
-            x: 1888,
-            y: 160,
-            width: 32,
-            height: 64,
-            isOpen: false,
-            openProgress: 0
-        };
-        this.devices.set(this.door.id, this.door);
+        // Exit Blast Doors & Power Sources (purely loaded from map)
+        this.doors = [];
+        this.powerSources = [];
 
         this.isLoaded = false;
         this._bindEvents();
@@ -53,36 +51,77 @@ export class LDtkLevel extends Level {
 
     _bindEvents() {
         this.eventBus.on('ACTIVATE_DEVICE', (deviceId) => {
-            if (deviceId === 'exit_door' || deviceId === this.door.id) {
-                this.door.isOpen = true;
-            }
+            const d = (this.doors || []).find(dr => dr.id === deviceId);
+            if (d) d.isOpen = true;
+            if (deviceId === 'exit_door' && this.door) this.door.isOpen = true;
+            if (deviceId === 'matrix_door' && this.matrixDoor) this.matrixDoor.isOpen = true;
+
             if (deviceId === 'shaft_hazard') {
                 const haz = this.colliders.find(c => c.deviceId === 'shaft_hazard');
+                if (haz) haz.isElectrified = false;
+            }
+            if (deviceId === 'matrix_hazard') {
+                const haz = this.colliders.find(c => c.deviceId === 'matrix_hazard');
                 if (haz) haz.isElectrified = false;
             }
         });
 
         this.eventBus.on('DEACTIVATE_DEVICE', (deviceId) => {
-            if (deviceId === 'exit_door' || deviceId === this.door.id) {
-                this.door.isOpen = false;
+            const d = (this.doors || []).find(dr => dr.id === deviceId);
+            if (d) d.isOpen = false;
+            if (deviceId === 'exit_door' && this.door) this.door.isOpen = false;
+            if (deviceId === 'matrix_door' && this.matrixDoor) this.matrixDoor.isOpen = false;
+
+            if (deviceId === 'shaft_hazard') {
+                const haz = this.colliders.find(c => c.deviceId === 'shaft_hazard');
+                if (haz) haz.isElectrified = true;
+            }
+            if (deviceId === 'matrix_hazard') {
+                const haz = this.colliders.find(c => c.deviceId === 'matrix_hazard');
+                if (haz) haz.isElectrified = true;
             }
         });
     }
 
     async load() {
         try {
-            // 1. Fetch main map.ldtk project data
-            const res = await fetch(this.ldtkPath);
+            // 1. Fetch main map.ldtk project data (cache-busting ensures hot updates are loaded immediately)
+            const cacheBust = this.ldtkPath.includes('?') ? `&t=${Date.now()}` : `?t=${Date.now()}`;
+            const res = await fetch(`${this.ldtkPath}${cacheBust}`);
             if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${this.ldtkPath}`);
             const data = await res.json();
 
-            // 2. Load composite images for all rooms
+            // 2. Load background image & room tile layers for all rooms
+            this.backgroundImage = await this._loadRoomImage(this.bgPath);
+
             const levels = data.levels || [];
             this.totalRooms = Math.max(1, levels.length);
             this.width = this.roomWidth * this.totalRooms;
+            this.rooms = levels.map((lvl, index) => ({
+                index,
+                id: lvl.identifier,
+                worldX: lvl.worldX !== undefined ? lvl.worldX : index * this.roomWidth,
+                worldY: lvl.worldY !== undefined ? lvl.worldY : 0,
+                pxWid: lvl.pxWid || this.roomWidth,
+                pxHei: lvl.pxHei || this.roomHeight
+            }));
 
             this.roomImages = await Promise.all(
-                levels.map((lvl, index) => this._loadRoomImage(`${this.basePath}Level_${index}/_composite.png`))
+                levels.map(async (lvl, index) => {
+                    const tilesPath = `${this.basePath}${lvl.identifier}/_tiles.png`;
+                    let img = await this._loadRoomImage(tilesPath);
+                    if (img) return img;
+
+                    const f2Path = `${this.basePath}${lvl.identifier}/Factory2.png`;
+                    img = await this._loadRoomImage(f2Path);
+                    if (img) return img;
+
+                    const idPath = `${this.basePath}${lvl.identifier}/_composite.png`;
+                    img = await this._loadRoomImage(idPath);
+                    if (img) return img;
+
+                    return this._loadRoomImage(`${this.basePath}Level_${index}/_composite.png`);
+                })
             );
 
             // 3. Parse Colliders, Entities & Pipes across all rooms
@@ -92,6 +131,8 @@ export class LDtkLevel extends Level {
             this.logicGates = [];
             this.lightBoxes = [];
             this.pipes = [];
+            this.powerSources = [];
+            this.doors = [];
 
             for (let i = 0; i < levels.length; i++) {
                 const lvl = levels[i];
@@ -103,9 +144,14 @@ export class LDtkLevel extends Level {
                 this._buildRoomPipes(lvl, worldX, worldY);
             }
 
+            // 5. Resolve puzzle cutoff boxes and door controls across all rooms
+            this._resolveCutoffBoxes();
+            this._resolveDoorControls();
+
             this.isLoaded = true;
             console.log(`[LDtkLevel] Successfully loaded ${levels.length} rooms (${this.width}x${this.height}px, ${this.colliders.length} colliders, ${this.drones.length} drones).`);
         } catch (err) {
+            window.__LAST_LOAD_ERR = (err && err.stack) || String(err);
             console.warn('[LDtkLevel] Network load failed, using pre-calculated fallback:', err);
             this._loadFallbackData();
         }
@@ -119,8 +165,21 @@ export class LDtkLevel extends Level {
                 console.warn(`[LDtkLevel] Failed to load ${src}`);
                 resolve(null);
             };
-            img.src = src;
+            const cacheBust = src.includes('?') ? `&t=${Date.now()}` : `?t=${Date.now()}`;
+            img.src = `${src}${cacheBust}`;
         });
+    }
+
+    addCollider(config) {
+        const col = super.addCollider(config);
+        this._staticSolidColliders = null;
+        return col;
+    }
+
+    _ensureStaticSolidColliders() {
+        if (!this._staticSolidColliders) {
+            this._staticSolidColliders = (this.colliders || []).filter(c => !c.isHazard || c.isWallRunnable);
+        }
     }
 
     _buildRoomColliders(lvl, worldX, worldY) {
@@ -178,6 +237,8 @@ export class LDtkLevel extends Level {
                 }
             }
         }
+
+
     }
 
     _buildRoomEntities(lvl, worldX, worldY, roomIndex) {
@@ -212,7 +273,8 @@ export class LDtkLevel extends Level {
                     this.drones.push(new Drone(`drone_${topLeftX}_${topLeftY}`, topLeftX, topLeftY, {
                         type: droneType,
                         message: message,
-                        assetLoader: this.assetLoader
+                        assetLoader: this.assetLoader,
+                        eventBus: this.eventBus
                     }));
                 } else if (id === 'Socket_Anchor') {
                     this.addSocket(new Socket(`anchor_${centerX}_${centerY}`, centerX, centerY, 'ANCHOR', {
@@ -226,7 +288,13 @@ export class LDtkLevel extends Level {
                     }));
                 } else if (id === 'Socket_Dial') {
                     const design = fields.Socket_Dial || 'T_SHAPE';
-                    const rot = fields.initialRotation || 0;
+                    let rot = fields.initialRotation || 0;
+                    // In And_gate_3, the 1-click bottom circuit dial starts horizontal (90 deg) so laser is active until clicked
+                    if (lvl.identifier === 'And_gate_3' && Math.round(ent.px[0]) === 624 && Math.round(ent.px[1]) === 208 && rot === 0) {
+                        rot = 90;
+                    }
+                    const steps = Math.round(rot >= 90 ? rot / 90 : rot) % 4;
+                    const initialAngle = steps * (Math.PI / 2);
                     const sock = new Socket(`dial_sock_${centerX}_${centerY}`, centerX, centerY, 'CIRCUIT', {
                         label: design,
                         assetLoader: this.assetLoader
@@ -234,15 +302,18 @@ export class LDtkLevel extends Level {
                     this.addSocket(sock);
 
                     if (this.circuitSystem) {
+                        const targetDev = (Math.round(centerX) === 1488 || Math.round(topLeftX) === 1488)
+                            ? 'shaft_hazard'
+                            : (fields.targetDevice || 'exit_door');
                         this.circuitSystem.addNode({
                             id: `dial_node_${centerX}_${centerY}`,
                             x: centerX,
                             y: centerY,
                             design: design,
                             ports: this._getInitialPorts(design, rot),
-                            rotationAngle: (rot % 4) * (Math.PI / 2),
-                            targetRotationAngle: (rot % 4) * (Math.PI / 2),
-                            deviceId: fields.targetDevice || 'exit_door'
+                            rotationAngle: initialAngle,
+                            targetRotationAngle: initialAngle,
+                            deviceId: targetDev
                         });
                         sock.circuitNodeId = `dial_node_${centerX}_${centerY}`;
                     }
@@ -257,35 +328,76 @@ export class LDtkLevel extends Level {
                     });
                 } else if (id === 'Hazard_Electric') {
                     const face = (fields.Face || 'RIGHT').toLowerCase();
+                    const hazId = fields.deviceId || `hazard_${Math.round(topLeftX)}_${Math.round(topLeftY)}`;
+                    const isCorridorBeam = (face === 'all_sides' || face === 'all') && w > h && w <= 128;
                     this.addHazardObject({
                         x: topLeftX,
                         y: topLeftY,
                         width: w,
                         height: h,
-                        isWallRunnable: fields.isWallRunnable !== undefined ? fields.isWallRunnable : true,
+                        isWallRunnable: fields.isWallRunnable !== undefined ? fields.isWallRunnable : false,
                         wallRunFace: face,
                         isElectrified: true,
-                        electrifiedFace: face,
-                        deviceId: fields.deviceId || 'shaft_hazard',
+                        electrifiedFace: isCorridorBeam ? 'beam' : face,
+                        isCorridorBeam: isCorridorBeam,
+                        deviceId: hazId,
                         shockDamage: fields.shockDamage || 8.0,
                         knockbackForce: 360
                     });
+                } else if (id === 'Power_source') {
+                    this.powerSources.push({
+                        id: `source_${Math.round(topLeftX)}_${Math.round(topLeftY)}`,
+                        x: topLeftX,
+                        y: topLeftY,
+                        width: w,
+                        height: h
+                    });
                 } else if (id === 'EntityDoor_Blast' || id === 'Door_Blast') {
-                    this.door.x = topLeftX;
-                    this.door.y = topLeftY;
-                    this.door.width = w;
-                    this.door.height = h;
-                    this.door.isOpen = Boolean(fields.startsOpen);
+                    const doorId = fields.id || `door_${Math.round(topLeftX)}_${Math.round(topLeftY)}`;
+                    let targetDoor = (this.doors || []).find(d => d.id === doorId);
+                    if (!targetDoor) {
+                        targetDoor = {
+                            id: doorId,
+                            x: topLeftX,
+                            y: topLeftY,
+                            width: w,
+                            height: h,
+                            isOpen: Boolean(fields.startsOpen),
+                            openProgress: 0
+                        };
+                        this.doors.push(targetDoor);
+                        this.devices.set(doorId, targetDoor);
+                    } else {
+                        targetDoor.x = topLeftX;
+                        targetDoor.y = topLeftY;
+                        targetDoor.width = w;
+                        targetDoor.height = h;
+                        targetDoor.isOpen = Boolean(fields.startsOpen);
+                    }
+                    if (doorId === 'exit_door') this.door = targetDoor;
+                    if (doorId === 'matrix_door') this.matrixDoor = targetDoor;
                 } else if (id === 'Logic_Gate') {
                     const gateType = fields.GateType || 'AND';
                     const orientation = fields.orientation || 0;
+                    const relGx = Math.round((ent.px[0] - (pivotX * w)) / 32);
+                    const relGy = Math.round((ent.px[1] - (pivotY * h)) / 32);
+                    let inPorts = fields.inPorts;
+                    let outPorts = fields.outPorts;
+                    if (!inPorts || !outPorts) {
+                        const deduced = this._deduceGatePorts(relGx, relGy, gateType);
+                        if (!inPorts) inPorts = deduced.inPorts;
+                        if (!outPorts) outPorts = deduced.outPorts;
+                    }
                     this.logicGates.push({
                         id: `gate_${topLeftX}_${topLeftY}`,
                         x: topLeftX,
                         y: topLeftY,
                         type: gateType,
                         orientation: orientation,
-                        isPowered: false
+                        inPorts: inPorts,
+                        outPorts: outPorts,
+                        isPowered: false,
+                        isConflict: false
                     });
                 } else if (id === 'Light_Box') {
                     this.lightBoxes.push({
@@ -318,12 +430,13 @@ export class LDtkLevel extends Level {
     }
 
     _getInitialPorts(design, rot) {
-        let base = [true, true, true, false]; // T_SHAPE default
-        if (design === 'CORNER') base = [false, true, true, false];
-        if (design === 'STRAIGHT') base = [false, true, false, true];
-        if (design === 'CROSS') base = [true, true, true, true];
+        // Base cardinal port masks [Top, Right, Bottom, Left] at rotationAngle = 0 in circuits.png:
+        let base = [false, true, true, true];   // T_SHAPE: Right, Bottom, Left (T pointing DOWN)
+        if (design === 'CORNER') base = [false, true, true, false];  // CORNER: Right, Bottom
+        if (design === 'STRAIGHT') base = [true, false, true, false]; // STRAIGHT: Top, Bottom
+        if (design === 'CROSS') base = [true, true, true, true];     // CROSS: 4-way
 
-        const steps = Math.floor(rot >= 90 ? rot / 90 : rot) % 4;
+        const steps = Math.round(rot >= 90 ? rot / 90 : rot) % 4;
         for (let i = 0; i < steps; i++) {
             base = [base[3], base[0], base[1], base[2]];
         }
@@ -332,18 +445,21 @@ export class LDtkLevel extends Level {
 
     _getDroneMessage(roomIndex, x, type) {
         if (roomIndex === 0) {
-            if (x < 300) return 'SYSTEM ONLINE: [A] / [D] to move, hold [SHIFT] to run.';
-            return 'CHASM TRANSIT: Press [SPACE] to leap over the opening.';
+            if (x < 300) return '[A] [D] = Move';
+            return '[SPACE] = Jump';
         }
         if (roomIndex === 1) {
-            if (x < 950) return 'CEILING ANCHOR: Click [LMB] towards anchor to shoot wire & swing!';
-            return 'MOMENTUM JUMP: Press [SPACE] while swinging mid-air to leap off!';
+            if (x < 950) return '[LMB] = Shoot Wire\n[RMB] = Cut Wire';
+            return '[SPACE] = Tether Jump';
         }
         if (roomIndex === 2) {
-            if (x < 1500) return 'ENERGY DEPLETED? Dock at the battery plate to recharge.';
-            return 'VERTICAL SHAFT: Auto-slides on walls, press [SPACE] to wall-jump!';
+            if (x < 1500) return 'Hold [S] = Recharge';
+            return '[SPACE] = Wall Jump\nHold [S] = Fast Slide';
         }
-        return 'Facility operating normally.';
+        if (roomIndex === 3) {
+            return '[E] = Rotate Junction\nInvert Dial = Cut Power';
+        }
+        return '[A] [D] = Move';
     }
 
     _loadFallbackData() {
@@ -369,19 +485,34 @@ export class LDtkLevel extends Level {
             { x: 1632, y: 64, width: 32, height: 256 },
             { x: 1472, y: 96, width: 96, height: 64 },
             { x: 1280, y: 224, width: 352, height: 96 },
-            { x: 1664, y: 224, width: 256, height: 96 }
+            { x: 1664, y: 224, width: 256, height: 96 },
+            // Room 3 (Sector 04: Substation Logic Matrix, worldX: 1920)
+            { x: 1920, y: 0, width: 640, height: 32 },
+            { x: 1920, y: 32, width: 128, height: 32 },
+            { x: 2368, y: 32, width: 192, height: 32 },
+            { x: 1920, y: 224, width: 160, height: 96 },
+            { x: 2144, y: 224, width: 64, height: 96 },
+            { x: 2240, y: 224, width: 320, height: 96 },
+            { x: 2368, y: 64, width: 128, height: 32 }
         ];
 
         this.addSocket(new Socket('anchor_1', 912, 144, 'ANCHOR', { label: 'SWING PIVOT', assetLoader: this.assetLoader }));
         this.addSocket(new Socket('battery_1', 1392, 208, 'CHARGER', { label: 'FAST CHARGE', assetLoader: this.assetLoader }));
+        this.addSocket(new Socket('anchor_matrix', 2112, 80, 'ANCHOR', { label: 'SWING PIVOT', assetLoader: this.assetLoader }));
+        this.addSocket(new Socket('battery_matrix', 1952, 208, 'CHARGER', { label: 'FAST CHARGE', assetLoader: this.assetLoader }));
 
         // 5 Dials in Level 2 (Room 2, worldX: 1280)
         const dialDefs = [
-            { x: 1488, y: 144, design: 'CORNER', rot: 270 },
-            { x: 1776, y: 144, design: 'T_SHAPE', rot: 0 },
-            { x: 1808, y: 144, design: 'T_SHAPE', rot: 0 },
-            { x: 1840, y: 144, design: 'T_SHAPE', rot: 0 },
-            { x: 1872, y: 144, design: 'CORNER', rot: 2 }
+            { x: 1488, y: 144, design: 'CORNER', rot: 270, dev: 'shaft_hazard' },
+            { x: 1776, y: 144, design: 'T_SHAPE', rot: 0, dev: 'exit_door' },
+            { x: 1808, y: 144, design: 'T_SHAPE', rot: 0, dev: 'exit_door' },
+            { x: 1840, y: 144, design: 'T_SHAPE', rot: 0, dev: 'exit_door' },
+            { x: 1872, y: 144, design: 'CORNER', rot: 2, dev: 'exit_door' },
+            // 4 Dials in Level 3 (Room 3, worldX: 1920)
+            { x: 2000, y: 112, design: 'T_SHAPE', rot: 0, dev: 'matrix_hazard' },
+            { x: 2064, y: 112, design: 'T_SHAPE', rot: 90, dev: 'matrix_door' },
+            { x: 2096, y: 112, design: 'CORNER', rot: 180, dev: 'matrix_door' },
+            { x: 2384, y: 48, design: 'CORNER', rot: 0, dev: 'matrix_door' }
         ];
         for (const d of dialDefs) {
             const sock = new Socket(`dial_sock_${d.x}_${d.y}`, d.x, d.y, 'CIRCUIT', {
@@ -390,39 +521,56 @@ export class LDtkLevel extends Level {
             });
             this.addSocket(sock);
             if (this.circuitSystem) {
+                const steps = Math.round(d.rot >= 90 ? d.rot / 90 : d.rot) % 4;
+                const initialAngle = steps * (Math.PI / 2);
                 this.circuitSystem.addNode({
                     id: `dial_node_${d.x}_${d.y}`,
                     x: d.x,
                     y: d.y,
                     design: d.design,
                     ports: this._getInitialPorts(d.design, d.rot),
-                    rotationAngle: (d.rot % 4) * (Math.PI / 2),
-                    targetRotationAngle: (d.rot % 4) * (Math.PI / 2),
-                    deviceId: 'exit_door'
+                    rotationAngle: initialAngle,
+                    targetRotationAngle: initialAngle,
+                    deviceId: d.dev || (d.x === 1488 ? 'shaft_hazard' : 'exit_door')
                 });
                 sock.circuitNodeId = `dial_node_${d.x}_${d.y}`;
             }
         }
 
-        // 3 Logic Gates in Level 2
+        // Logic Gates in Level 2 & Level 3
         this.logicGates = [
-            { id: 'gate_1792_64', x: 1792, y: 64, type: 'OR', orientation: 0, isPowered: false },
-            { id: 'gate_1856_64', x: 1856, y: 64, type: 'OR', orientation: 0, isPowered: false },
-            { id: 'gate_1824_32', x: 1824, y: 32, type: 'AND', orientation: 0, isPowered: false }
+            { id: 'gate_1792_64', x: 1792, y: 64, type: 'OR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
+            { id: 'gate_1856_64', x: 1856, y: 64, type: 'OR', orientation: 0, inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
+            { id: 'gate_1824_32', x: 1824, y: 32, type: 'AND', orientation: 0, inPorts: [PORT.LEFT, PORT.RIGHT], outPorts: [PORT.TOP], isPowered: false, isConflict: false },
+            // Room 3 Logic Gates
+            { id: 'gate_2048_160', x: 2048, y: 160, type: 'NOT', orientation: 0, inPorts: [PORT.LEFT], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false },
+            { id: 'gate_2432_128', x: 2432, y: 128, type: 'OR', orientation: 0, inPorts: [PORT.TOP, PORT.BOTTOM], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false },
+            { id: 'gate_2464_160', x: 2464, y: 160, type: 'AND', orientation: 0, inPorts: [PORT.TOP, PORT.LEFT], outPorts: [PORT.RIGHT], isPowered: false, isConflict: false }
         ];
 
-        // Light Box in Level 2
+        // Light Boxes in Level 2 & Level 3
         this.lightBoxes = [
-            { id: 'lightbox_1888_128', x: 1888, y: 128, width: 32, height: 32, color: '#FF0000', isPowered: false }
+            { id: 'lightbox_1888_128', x: 1888, y: 128, width: 32, height: 32, color: '#FF0000', isPowered: false },
+            { id: 'lightbox_2496_160', x: 2496, y: 160, width: 32, height: 32, color: '#FF0000', isPowered: false }
         ];
 
-        // 19 Pipe Tiles in Level 2
+        // Pipe Tiles in Level 2 (including Chamber 1 & Chamber 2 independent feeds)
         this.pipes = [
+            // Chamber 1 Left Ceiling Feed & Hazard Cutoff
             { x: 1472, y: 0, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1472, y: 32, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1472, y: 64, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1472, y: 96, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1504, y: 128, srcX: 0, srcY: 64, tileId: 8 },
+
+            // Chamber 2 Independent Ceiling Power Feed along wall (1728) into Dial 1 (1760)
+            { x: 1728, y: 0, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1728, y: 32, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1728, y: 64, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1728, y: 96, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1728, y: 128, srcX: 32, srcY: 128, tileId: 17 },
+
+            // Chamber 2 Logic Puzzle Conduit Network
             { x: 1760, y: 96, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1760, y: 64, srcX: 64, srcY: 128, tileId: 18 },
             { x: 1792, y: 96, srcX: 96, srcY: 64, tileId: 11 },
@@ -436,7 +584,59 @@ export class LDtkLevel extends Level {
             { x: 1888, y: 0, srcX: 0, srcY: 128, tileId: 16 },
             { x: 1888, y: 32, srcX: 96, srcY: 64, tileId: 11 },
             { x: 1888, y: 64, srcX: 96, srcY: 64, tileId: 11 },
-            { x: 1888, y: 96, srcX: 96, srcY: 64, tileId: 11 }
+            { x: 1888, y: 96, srcX: 96, srcY: 64, tileId: 11 },
+
+            // Room 3 (Sector 04) Pipes:
+            // Ceiling Power Intake at (1984, 0)
+            { x: 1984, y: 0, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1984, y: 32, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1984, y: 64, srcX: 96, srcY: 64, tileId: 11 },
+            // Inverter feed from Dial 1 (2000, 112)
+            { x: 1984, y: 128, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 1984, y: 160, srcX: 32, srcY: 128, tileId: 17 },
+            { x: 2016, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            // Inverter to Hazard
+            { x: 2080, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2112, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2144, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2176, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2208, y: 160, srcX: 0, srcY: 64, tileId: 8 },
+            // Inter-dial (2000, 112 to 2064, 112)
+            { x: 2016, y: 96, srcX: 0, srcY: 64, tileId: 8 },
+            // Upper gantry bridge feed
+            { x: 2048, y: 64, srcX: 32, srcY: 128, tileId: 17 },
+            { x: 2048, y: 32, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 2080, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2112, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2144, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2176, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2208, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2240, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2272, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2304, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2336, y: 32, srcX: 0, srcY: 64, tileId: 8 },
+            // Upper Dial 4 to Gate 2
+            { x: 2368, y: 64, srcX: 64, srcY: 96, tileId: 15 },
+            { x: 2400, y: 64, srcX: 64, srcY: 128, tileId: 18 },
+            { x: 2400, y: 96, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 2432, y: 96, srcX: 64, srcY: 128, tileId: 18 },
+            // Lower Dial 3 to Gate 2
+            { x: 2080, y: 128, srcX: 96, srcY: 64, tileId: 11 },
+            { x: 2080, y: 192, srcX: 32, srcY: 128, tileId: 17 },
+            { x: 2112, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2144, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2176, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2208, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2240, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2272, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2304, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2336, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2368, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2400, y: 192, srcX: 0, srcY: 64, tileId: 8 },
+            { x: 2432, y: 192, srcX: 0, srcY: 128, tileId: 16 },
+            { x: 2432, y: 160, srcX: 96, srcY: 64, tileId: 11 },
+            // Gate 2 to Gate 3
+            { x: 2464, y: 128, srcX: 0, srcY: 128, tileId: 16 }
         ];
 
         this.addWallRunWall({ x: 1632, y: 64, width: 32, height: 160, wallRunFace: 'both' });
@@ -453,49 +653,133 @@ export class LDtkLevel extends Level {
             deviceId: 'shaft_hazard'
         });
 
+        this.addWallRunWall({ x: 2336, y: 64, width: 32, height: 160, wallRunFace: 'left' });
+        this.addHazardObject({
+            x: 2240,
+            y: 64,
+            width: 32,
+            height: 160,
+            isWallRunnable: true,
+            wallRunFace: 'right',
+            isElectrified: true,
+            electrifiedFace: 'right',
+            deviceId: 'matrix_hazard'
+        });
+
         this.spawnPoint = { x: 64, y: 192 };
+        this._staticSolidColliders = null;
         this.isLoaded = true;
     }
 
-    update(dt, player) {
+    getRoomCheckpoint(roomIndex) {
+        if (!this.rooms || this.rooms.length === 0) {
+            return { x: 64, y: 192 };
+        }
+        const rm = this.rooms[Math.max(0, Math.min(this.rooms.length - 1, roomIndex))];
+        if (rm.id === 'And_gate_3_above') {
+            return { x: 3328, y: -192 };
+        }
+        return { x: rm.worldX + 64, y: rm.worldY + 192 };
+    }
+
+    update(dt, player, input = null) {
         super.update(dt);
 
         // Update Drones
         for (const drone of this.drones) {
-            drone.update(dt, player);
+            drone.update(dt, player, input);
         }
 
-        // Animate exit blast door
-        const d = this.door;
-        const targetProgress = d.isOpen ? 1 : 0;
-        if (d.openProgress !== targetProgress) {
-            const step = dt * 1.8;
-            d.openProgress = targetProgress > d.openProgress
-                ? Math.min(targetProgress, d.openProgress + step)
-                : Math.max(targetProgress, d.openProgress - step);
+        // Animate all exit blast doors
+        for (const d of (this.doors || [])) {
+            const targetProgress = d.isOpen ? 1 : 0;
+            if (d.openProgress !== targetProgress) {
+                const step = dt * 1.8;
+                d.openProgress = targetProgress > d.openProgress
+                    ? Math.min(targetProgress, d.openProgress + step)
+                    : Math.max(targetProgress, d.openProgress - step);
+            }
         }
 
-        // Room tracking
+        // 2D Room tracking
         if (player) {
-            const room = Math.max(0, Math.min(this.totalRooms - 1, Math.floor(player.x / this.roomWidth)));
-            if (room !== this.activeRoomIndex) {
-                this.activeRoomIndex = room;
-                this.eventBus.emit('ROOM_CHANGED', { roomIndex: room });
+            const px = player.x + (player.width || 32) / 2;
+            const py = player.y + (player.height || 32) / 2;
+            let currentRoom = (this.rooms || []).find(r =>
+                px >= r.worldX && px < r.worldX + r.pxWid &&
+                py >= r.worldY && py < r.worldY + r.pxHei
+            );
+            if (!currentRoom && this.rooms && this.rooms.length > 0) {
+                let closest = this.rooms[0];
+                let minDist = Infinity;
+                for (const r of this.rooms) {
+                    const cx = r.worldX + r.pxWid / 2;
+                    const cy = r.worldY + r.pxHei / 2;
+                    const d = Math.hypot(cx - px, cy - py);
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = r;
+                    }
+                }
+                currentRoom = closest;
+            }
+            if (currentRoom && currentRoom.index !== this.activeRoomIndex) {
+                this.activeRoomIndex = currentRoom.index;
+                this.eventBus.emit('ROOM_CHANGED', { roomIndex: currentRoom.index, roomId: currentRoom.id });
             }
         }
     }
 
-    renderBackground(ctx) {
+    renderBackground(ctx, camera = null) {
         ctx.save();
+        ctx.imageSmoothingEnabled = false;
+
+        // Base dark tone beneath background in case of loading or borders
         ctx.fillStyle = '#10141d';
         ctx.fillRect(0, 0, this.width, this.height);
 
-        // Draw composite images for each 640x320 room
+        // 1. Draw the game factory background for visible rooms
+        if (this.rooms && this.rooms.length > 0) {
+            for (let i = 0; i < this.rooms.length; i++) {
+                const rm = this.rooms[i];
+                const rx = rm ? rm.worldX : i * this.roomWidth;
+                const ry = rm ? rm.worldY : 0;
+                const rw = rm ? rm.pxWid : this.roomWidth;
+                const rh = rm ? rm.pxHei : this.roomHeight;
+
+                if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(rx, ry, rw, rh, 32)) {
+                    continue;
+                }
+
+                if (this.backgroundImage && this.backgroundImage.complete) {
+                    ctx.drawImage(this.backgroundImage, rx, ry, rw, rh);
+                }
+            }
+        } else if (this.backgroundImage && this.backgroundImage.complete) {
+            for (let i = 0; i < this.totalRooms; i++) {
+                const rx = i * this.roomWidth;
+                if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(rx, 0, this.roomWidth, this.roomHeight, 32)) {
+                    continue;
+                }
+                ctx.drawImage(this.backgroundImage, rx, 0, this.roomWidth, this.roomHeight);
+            }
+        }
+
+        // 2. Draw room tile layers (Factory2, platforms, structures) on top of visible rooms
         for (let i = 0; i < this.roomImages.length; i++) {
             const img = this.roomImages[i];
+            const rm = this.rooms ? this.rooms[i] : null;
+            const rx = rm ? rm.worldX : i * this.roomWidth;
+            const ry = rm ? rm.worldY : 0;
+            const rw = rm ? rm.pxWid : this.roomWidth;
+            const rh = rm ? rm.pxHei : this.roomHeight;
+
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(rx, ry, rw, rh, 32)) {
+                continue;
+            }
+
             if (img && img.complete) {
-                ctx.imageSmoothingEnabled = false;
-                ctx.drawImage(img, i * this.roomWidth, 0, this.roomWidth, this.roomHeight);
+                ctx.drawImage(img, rx, ry, rw, rh);
             }
         }
 
@@ -503,42 +787,63 @@ export class LDtkLevel extends Level {
     }
 
     getSolidColliders() {
-        const list = [...this.colliders];
-        if (this.door && this.door.openProgress < 0.85) {
-            const currentHeight = this.door.height * (1 - this.door.openProgress);
-            list.push({
-                x: this.door.x,
-                y: this.door.y,
-                width: this.door.width,
-                height: currentHeight
-            });
+        // Zero-GC collider list retrieval: reuse static cached list and avoid array allocations
+        this._ensureStaticSolidColliders();
+        if (!this._activeSolidCollidersList) {
+            this._activeSolidCollidersList = [];
         }
-        return list;
+        this._activeSolidCollidersList.length = 0;
+
+        const staticList = this._staticSolidColliders;
+        for (let i = 0; i < staticList.length; i++) {
+            this._activeSolidCollidersList.push(staticList[i]);
+        }
+
+        for (const d of (this.doors || [])) {
+            if (d && d.openProgress < 0.85) {
+                if (!d._colliderObj) {
+                    d._colliderObj = { x: d.x, y: d.y, width: d.width, height: d.height };
+                }
+                d._colliderObj.x = d.x;
+                d._colliderObj.y = d.y;
+                d._colliderObj.width = d.width;
+                d._colliderObj.height = d.height * (1 - d.openProgress);
+                this._activeSolidCollidersList.push(d._colliderObj);
+            }
+        }
+        return this._activeSolidCollidersList;
     }
 
-    renderForeground(ctx) {
+    getHazardColliders() {
+        return (this.colliders || []).filter(c => c.isHazard === true);
+    }
+
+    renderForeground(ctx, camera = null) {
         ctx.save();
 
         // 1. Render tactile wall-run runners
-        this.renderWallRunGripStrips(ctx);
+        this.renderWallRunGripStrips(ctx, camera);
 
         // 2. Render exit door
-        this._renderDoor(ctx);
+        this._renderDoor(ctx, camera);
 
         // 3. Render sockets
         for (const sock of this.sockets) {
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(sock.x - 16, sock.y - 16, 32, 32, 32)) {
+                continue;
+            }
             sock.render(ctx);
         }
 
         // 4. Render Logic Gates
-        this._renderLogicGates(ctx);
+        this._renderLogicGates(ctx, camera);
 
         // 5. Render Light Boxes
-        this._renderLightBoxes(ctx);
+        this._renderLightBoxes(ctx, camera);
 
         // 6. Render Drones
         for (const drone of this.drones) {
-            drone.render(ctx);
+            drone.render(ctx, camera);
         }
 
         // 7. Room watermark in corner
@@ -549,57 +854,262 @@ export class LDtkLevel extends Level {
         ctx.restore();
     }
 
-    _renderLogicGates(ctx) {
+    _renderLogicGates(ctx, camera = null) {
         if (!this.logicGates || this.logicGates.length === 0) return;
-        const sheet = this.assetLoader ? this.assetLoader.getImage('gates_sheet') : null;
-        if (!sheet) return;
-
-        const GATE_COORDS = {
-            'AND':  { sx: 0,  sy: 0 },
-            'OR':   { sx: 32, sy: 0 },
-            'NOT':  { sx: 64, sy: 0 },
-            'NAND': { sx: 0,  sy: 32 },
-            'NOR':  { sx: 32, sy: 32 },
-            'XOR':  { sx: 64, sy: 32 }
-        };
-
-        ctx.save();
-        ctx.imageSmoothingEnabled = false;
 
         for (const gate of this.logicGates) {
-            const coord = GATE_COORDS[gate.type] || GATE_COORDS['AND'];
             const gx = Math.round(gate.x);
             const gy = Math.round(gate.y);
-
-            // Draw base gate sprite
-            ctx.drawImage(sheet, coord.sx, coord.sy, 32, 32, gx, gy, 32, 32);
-
-            // Dynamic logic gate active state glow
-            if (gate.isPowered) {
-                ctx.save();
-                ctx.shadowColor = '#00ddff';
-                ctx.shadowBlur = 6;
-                ctx.strokeStyle = '#80e5ff';
-                ctx.lineWidth = 1.2;
-                ctx.strokeRect(gx + 1, gy + 1, 30, 30);
-
-                // Center glowing power filament
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(gx + 16, gy + 16, 2.5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(gx, gy, 32, 32, 32)) {
+                continue;
             }
+            this._renderSingleLogicGate(ctx, gate, gx, gy);
         }
+    }
+
+    _renderSingleLogicGate(ctx, gate, gx, gy) {
+        const isPowered = Boolean(gate.isPowered);
+        const type = (gate.type || 'AND').toUpperCase();
+
+        ctx.save();
+
+        // 0. Standard Industrial Truss Background Patch (masks any background seams)
+        ctx.fillStyle = '#222a5c';
+        ctx.fillRect(gx, gy, 32, 32);
+
+        // 1. Industrial Micro-Controller Bezel & Chassis (32x32)
+        ctx.fillStyle = isPowered ? '#0f1722' : '#0c121a';
+        ctx.strokeStyle = isPowered ? '#2e5b82' : '#1c2838';
+        ctx.lineWidth = 1.2;
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(gx + 2, gy + 2, 28, 28, 3.5);
+        } else {
+            ctx.rect(gx + 2, gy + 2, 28, 28);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // Inner beveled rim
+        ctx.strokeStyle = isPowered ? 'rgba(0, 220, 255, 0.20)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1.0;
+        ctx.strokeRect(gx + 3.5, gy + 3.5, 25, 25);
+
+        // Corner mounting micro-screws
+        ctx.fillStyle = isPowered ? '#4a7299' : '#2b3b4e';
+        const rivets = [
+            [gx + 4.5, gy + 4.5],
+            [gx + 27.5, gy + 4.5],
+            [gx + 4.5, gy + 27.5],
+            [gx + 27.5, gy + 27.5]
+        ];
+        for (const [rx, ry] of rivets) {
+            ctx.beginPath();
+            ctx.arc(rx, ry, 0.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Metallic contact pins on module edges
+        ctx.fillStyle = isPowered ? '#55a8c9' : '#31445b';
+        ctx.fillRect(gx, gy + 8, 2.5, 2);   // Top input lead
+        ctx.fillRect(gx, gy + 15, 2.5, 2);  // Bottom input lead
+        ctx.fillRect(gx + 29.5, gy + 11.5, 2.5, 2); // Output lead
+
+        // Status LED diode in top-right corner: lit when powered, off when disconnected
+        const ledX = gx + 25.5;
+        const ledY = gy + 6.5;
+        if (isPowered) {
+            ctx.fillStyle = '#00e676';
+            ctx.beginPath();
+            ctx.arc(ledX, ledY, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ledX, ledY, 0.8, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Disconnected: light is off
+            ctx.fillStyle = '#223142';
+            ctx.beginPath();
+            ctx.arc(ledX, ledY, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 2. High-Precision Vector IEEE Logic Symbol
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+
+        if (isPowered) {
+            ctx.strokeStyle = '#00ddff';
+            ctx.fillStyle = 'rgba(0, 221, 255, 0.08)';
+            ctx.lineWidth = 1.4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        } else {
+            // Disconnected: light is off
+            ctx.strokeStyle = '#41556e';
+            ctx.fillStyle = 'transparent';
+            ctx.lineWidth = 1.2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        this._renderGateSymbol(ctx, type, gx, gy, isPowered);
+
+        if (isPowered) {
+            // Crisp white filament highlight
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 0.8;
+            this._renderGateSymbol(ctx, type, gx, gy, false);
+        }
+        ctx.restore();
+
+        // 3. Crisp High-Legibility Typography Label
+        ctx.save();
+        ctx.font = 'bold 7px "Segoe UI", "Roboto", "Consolas", monospace, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        if (isPowered) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(type, gx + 16, gy + 24.5);
+        } else {
+            // Disconnected: unlit label
+            ctx.fillStyle = '#5a738f';
+            ctx.fillText(type, gx + 16, gy + 24.5);
+        }
+        ctx.restore();
 
         ctx.restore();
     }
 
-    _renderLightBoxes(ctx) {
+    _renderGateSymbol(ctx, type, gx, gy, shouldFill = true) {
+        ctx.beginPath();
+
+        if (type === 'AND') {
+            // ANSI/IEEE Standard AND Gate
+            // Input lead lines
+            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.lineTo(gx + 7.5, gy + 8.5);
+            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.lineTo(gx + 7.5, gy + 15.5);
+
+            // Gate contour
+            ctx.moveTo(gx + 7.5, gy + 5.5);
+            ctx.lineTo(gx + 14, gy + 5.5);
+            ctx.bezierCurveTo(gx + 21.5, gy + 5.5, gx + 21.5, gy + 18.5, gx + 14, gy + 18.5);
+            ctx.lineTo(gx + 7.5, gy + 18.5);
+            ctx.closePath();
+
+            // Output lead line
+            ctx.moveTo(gx + 20.5, gy + 12);
+            ctx.lineTo(gx + 25.5, gy + 12);
+
+        } else if (type === 'OR') {
+            // ANSI/IEEE Standard OR Gate
+            // Curved concave back + bowed sides to pointed tip
+            ctx.moveTo(gx + 7.5, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 16, gy + 6.2, gx + 22.5, gy + 12);
+            ctx.quadraticCurveTo(gx + 16, gy + 17.8, gx + 7.5, gy + 18.5);
+            ctx.quadraticCurveTo(gx + 10.5, gy + 12, gx + 7.5, gy + 5.5);
+            ctx.closePath();
+
+            // Input lead lines into curved back
+            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.lineTo(gx + 8.8, gy + 8.5);
+            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.lineTo(gx + 8.8, gy + 15.5);
+
+            // Output lead line
+            ctx.moveTo(gx + 22.5, gy + 12);
+            ctx.lineTo(gx + 26.5, gy + 12);
+
+        } else if (type === 'NOT') {
+            // Inverter Triangle + Inversion Bubble
+            ctx.moveTo(gx + 7.5, gy + 6.5);
+            ctx.lineTo(gx + 17.5, gy + 12);
+            ctx.lineTo(gx + 7.5, gy + 17.5);
+            ctx.closePath();
+
+            ctx.moveTo(gx + 21, gy + 12);
+            ctx.arc(gx + 19.5, gy + 12, 1.6, 0, Math.PI * 2);
+
+            ctx.moveTo(gx + 4.5, gy + 12);
+            ctx.lineTo(gx + 7.5, gy + 12);
+            ctx.moveTo(gx + 21.1, gy + 12);
+            ctx.lineTo(gx + 25.5, gy + 12);
+
+        } else if (type === 'NAND') {
+            // AND shape with Bubble
+            ctx.moveTo(gx + 7.5, gy + 5.5);
+            ctx.lineTo(gx + 13, gy + 5.5);
+            ctx.bezierCurveTo(gx + 19.5, gy + 5.5, gx + 19.5, gy + 18.5, gx + 13, gy + 18.5);
+            ctx.lineTo(gx + 7.5, gy + 18.5);
+            ctx.closePath();
+
+            ctx.moveTo(gx + 22.5, gy + 12);
+            ctx.arc(gx + 21, gy + 12, 1.5, 0, Math.PI * 2);
+
+            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.lineTo(gx + 7.5, gy + 8.5);
+            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.lineTo(gx + 7.5, gy + 15.5);
+            ctx.moveTo(gx + 22.5, gy + 12);
+            ctx.lineTo(gx + 26, gy + 12);
+
+        } else if (type === 'NOR') {
+            // OR shape with Bubble
+            ctx.moveTo(gx + 7.5, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 15, gy + 6.2, gx + 20.5, gy + 12);
+            ctx.quadraticCurveTo(gx + 15, gy + 17.8, gx + 7.5, gy + 18.5);
+            ctx.quadraticCurveTo(gx + 10.5, gy + 12, gx + 7.5, gy + 5.5);
+            ctx.closePath();
+
+            ctx.moveTo(gx + 23.5, gy + 12);
+            ctx.arc(gx + 22, gy + 12, 1.5, 0, Math.PI * 2);
+
+            ctx.moveTo(gx + 4.5, gy + 8.5);
+            ctx.lineTo(gx + 8.8, gy + 8.5);
+            ctx.moveTo(gx + 4.5, gy + 15.5);
+            ctx.lineTo(gx + 8.8, gy + 15.5);
+            ctx.moveTo(gx + 23.5, gy + 12);
+            ctx.lineTo(gx + 26.5, gy + 12);
+
+        } else if (type === 'XOR') {
+            // Auxiliary curved back line + OR body
+            ctx.moveTo(gx + 5, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 8, gy + 12, gx + 5, gy + 18.5);
+
+            ctx.moveTo(gx + 8, gy + 5.5);
+            ctx.quadraticCurveTo(gx + 16, gy + 6.2, gx + 22.5, gy + 12);
+            ctx.quadraticCurveTo(gx + 16, gy + 17.8, gx + 8, gy + 18.5);
+            ctx.quadraticCurveTo(gx + 11, gy + 12, gx + 8, gy + 5.5);
+            ctx.closePath();
+
+            ctx.moveTo(gx + 3, gy + 8.5);
+            ctx.lineTo(gx + 6, gy + 8.5);
+            ctx.moveTo(gx + 3, gy + 15.5);
+            ctx.lineTo(gx + 6, gy + 15.5);
+            ctx.moveTo(gx + 22.5, gy + 12);
+            ctx.lineTo(gx + 26.5, gy + 12);
+        }
+
+        if (shouldFill) {
+            ctx.fill();
+        }
+        ctx.stroke();
+    }
+
+    _renderLightBoxes(ctx, camera = null) {
         if (!this.lightBoxes || this.lightBoxes.length === 0) return;
         const sheet = this.assetLoader ? this.assetLoader.getImage('circuits_sheet') : null;
 
         for (const box of this.lightBoxes) {
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(box.x, box.y, box.width || 32, box.height || 32, 32)) {
+                continue;
+            }
             ctx.save();
             ctx.imageSmoothingEnabled = false;
 
@@ -611,74 +1121,67 @@ export class LDtkLevel extends Level {
                 ctx.fillRect(box.x, box.y, box.width, box.height);
             }
 
-            // 2. High-visibility Illuminated Status Diode
+            // 2. High-visibility Status Diode (no neon blur)
             const lampX = Math.round(box.x + box.width / 2);
             const lampY = Math.round(box.y + box.height / 2);
 
             if (box.isPowered) {
-                // Online / Unlocked: Radiant Cyber Green Diode with beam halo
-                ctx.save();
-                ctx.shadowColor = '#00ff88';
-                ctx.shadowBlur = 12;
-                ctx.fillStyle = '#00ff88';
+                // Online / Unlocked: Clean green status diode
+                ctx.fillStyle = '#00cc66';
                 ctx.beginPath();
-                ctx.arc(lampX, lampY, 5, 0, Math.PI * 2);
+                ctx.arc(lampX, lampY, 4, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.shadowBlur = 0;
                 ctx.fillStyle = '#ffffff';
                 ctx.beginPath();
-                ctx.arc(lampX, lampY, 2, 0, Math.PI * 2);
+                ctx.arc(lampX, lampY, 1.5, 0, Math.PI * 2);
                 ctx.fill();
-
-                // Downward ambient wash onto blast door frame
-                const grad = ctx.createLinearGradient(lampX, lampY, lampX, lampY + 28);
-                grad.addColorStop(0, 'rgba(0, 255, 136, 0.45)');
-                grad.addColorStop(1, 'rgba(0, 255, 136, 0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(box.x - 4, lampY, box.width + 8, 28);
-                ctx.restore();
             } else {
-                // Locked: Crimson Red Diode with Slow Breathing
-                const pulse = 0.85 + Math.sin(Date.now() * 0.003) * 0.15;
-                ctx.save();
-                ctx.shadowColor = '#ff2244';
-                ctx.shadowBlur = 6 * pulse;
-                ctx.fillStyle = '#ff2244';
+                // Locked: Clean muted red diode
+                ctx.fillStyle = '#881824';
                 ctx.beginPath();
-                ctx.arc(lampX, lampY, 4.5 * pulse, 0, Math.PI * 2);
+                ctx.arc(lampX, lampY, 3, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#ffa4a4';
+                ctx.fillStyle = '#cc4455';
                 ctx.beginPath();
-                ctx.arc(lampX, lampY, 1.8, 0, Math.PI * 2);
+                ctx.arc(lampX, lampY, 1.2, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.restore();
             }
 
             ctx.restore();
         }
     }
 
-    _renderDoor(ctx) {
-        const d = this.door;
+    _renderSingleDoor(ctx, d) {
         const currentY = d.y - d.height * d.openProgress;
         const visibleHeight = d.height * (1 - d.openProgress);
 
         ctx.save();
-        // Door Frame
-        ctx.fillStyle = '#14181f';
-        ctx.fillRect(d.x - 2, d.y - 4, d.width + 4, d.height + 4);
-        ctx.strokeStyle = '#2e3745';
-        ctx.strokeRect(d.x - 2, d.y - 4, d.width + 4, d.height + 4);
+        // Door Frame: Industrial side jambs and top lintel / track (no opaque interior fill)
+        ctx.fillStyle = '#1e2633';
+        ctx.fillRect(d.x - 3, d.y - 4, 3, d.height + 4);              // Left jamb
+        ctx.fillRect(d.x + d.width, d.y - 4, 3, d.height + 4);         // Right jamb
+        ctx.fillRect(d.x - 3, d.y - 4, d.width + 6, 4);                // Top lintel / track
 
-        // Sliding Panel
+        ctx.strokeStyle = '#2e3745';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(d.x - 3, d.y - 4, 3, d.height + 4);
+        ctx.strokeRect(d.x + d.width, d.y - 4, 3, d.height + 4);
+        ctx.strokeRect(d.x - 3, d.y - 4, d.width + 6, 4);
+
+        // Sliding Panel (clipped to doorway opening so panel retracts cleanly into header)
         if (visibleHeight > 2) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(d.x, d.y, d.width, d.height);
+            ctx.clip();
+
             ctx.fillStyle = '#3a4454';
             ctx.fillRect(d.x, currentY, d.width, d.height);
             ctx.fillStyle = d.isOpen ? '#00ffaa' : '#ff3344';
             ctx.fillRect(d.x + 4, currentY + d.height / 2 - 2, d.width - 8, 4);
+            ctx.restore();
         }
 
         // Status Lamp
@@ -688,5 +1191,86 @@ export class LDtkLevel extends Level {
         ctx.fill();
 
         ctx.restore();
+    }
+
+    _renderDoor(ctx, camera = null) {
+        for (const d of (this.doors || [])) {
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(d.x - 8, d.y - 16, d.width + 16, d.height + 24, 32)) {
+                continue;
+            }
+            this._renderSingleDoor(ctx, d);
+        }
+    }
+
+    _resolveCutoffBoxes() {
+        if (!this.colliders || !this.lightBoxes) return;
+        const hazards = this.colliders.filter(c => c.isHazard);
+        for (const haz of hazards) {
+            // Room 4: And_gate_2 (worldX: 2560..3200, worldY: 0)
+            if (haz.x >= 2560 && haz.x < 3200) {
+                haz.cutoffBoxId = 'lightbox_3040_256';
+            }
+            // Room 5: And_gate_3 (worldX: 3200..3840, worldY: 0..320)
+            else if (haz.x >= 3200 && haz.x < 3840 && haz.y >= 0) {
+                if (haz.x === 3424) {
+                    // Wall laser on left wall
+                    haz.cutoffBoxId = 'lightbox_3392_128';
+                } else if (haz.x === 3712 && haz.y === 160) {
+                    // Lower laser in wall-run shaft
+                    haz.cutoffBoxId = 'lightbox_3680_160';
+                    haz.isCorridorBeam = true;
+                } else if (haz.x === 3712 && haz.y === 32) {
+                    // Upper laser in wall-run shaft
+                    haz.cutoffBoxId = 'lightbox_3776_32';
+                    haz.isCorridorBeam = true;
+                }
+            }
+            // Room 6: And_gate_3_above (worldX: 3200..3840, worldY: -320..0)
+            else if (haz.x >= 3200 && haz.x < 3840 && haz.y < 0) {
+                if (haz.x === 3232) {
+                    // Lower hazard
+                    haz.cutoffBoxId = 'lightbox_3296_-96';
+                    haz.isCorridorBeam = true;
+                } else if (haz.x === 3488) {
+                    // Upper walkway laser: spans all the way across to below the blast door
+                    haz.cutoffBoxId = 'lightbox_3776_-256';
+                }
+            }
+        }
+    }
+
+    _resolveDoorControls() {
+        if (!this.doors || !this.lightBoxes) return;
+        for (const d of this.doors) {
+            if (d.x === 2176 && d.y === 128) {
+                d.controlBoxId = 'lightbox_2176_96';
+            } else if (d.x === 3776 && d.y === -224) {
+                d.controlBoxId = 'lightbox_3776_-256';
+            }
+        }
+    }
+
+    _deduceGatePorts(relGx, relGy, gateType) {
+        // Room 3 (And_gate): gate at rel [5, 1] -> Inputs: Left, Bottom. Output: Right.
+        if (relGx === 5 && relGy === 1) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        // Room 4 (And_gate_2): gates at rel [7, 8] and [9, 8] -> Inputs: Left, Top. Output: Right.
+        if ((relGx === 7 || relGx === 9) && relGy === 8) {
+            return { inPorts: [PORT.LEFT, PORT.TOP], outPorts: [PORT.RIGHT] };
+        }
+        // Room 5 (And_gate_3): gate at rel [13, 4] -> Inputs: Top, Right. Output: Bottom.
+        if (relGx === 13 && relGy === 4) {
+            return { inPorts: [PORT.TOP, PORT.RIGHT], outPorts: [PORT.BOTTOM] };
+        }
+        // Room 6 (And_gate_3_above): OR gate at rel [6, 6] -> Inputs: Left, Right. Output: Top.
+        if (relGx === 6 && relGy === 6) {
+            return { inPorts: [PORT.LEFT, PORT.RIGHT], outPorts: [PORT.TOP] };
+        }
+        // Room 6 (And_gate_3_above): gates at rel [12, 0], [14, 0], [16, 0] -> Inputs: Left, Bottom. Output: Right.
+        if ((relGx === 12 || relGx === 14 || relGx === 16) && relGy === 0) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
     }
 }

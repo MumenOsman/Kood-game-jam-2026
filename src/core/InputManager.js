@@ -1,12 +1,14 @@
 /**
  * InputManager.js
  * Captures keyboard and mouse events, coordinates screen/world mouse mappings,
- * and tracks single-frame edge triggers (pressed / released this frame).
+ * tracks single-frame edge triggers, and provides configurable keybindings
+ * with persistence in localStorage.
  */
 export class InputManager {
     constructor(canvas, camera = null) {
         this.canvas = canvas;
         this.camera = camera;
+        this.STORAGE_KEY = 'tether_keybindings_v1';
 
         // Key states
         this.keysDown = new Set();
@@ -23,11 +25,84 @@ export class InputManager {
         this.leftReleasedThisFrame = false;
         this.rightReleasedThisFrame = false;
 
+        // Default configurable bindings
+        this.defaultBindings = {
+            moveLeft: ['KeyA', 'ArrowLeft'],
+            moveRight: ['KeyD', 'ArrowRight'],
+            moveUp: ['KeyW', 'ArrowUp'],
+            moveDown: ['KeyS', 'ArrowDown'],
+            jump: ['Space'],
+            dock: ['KeyS', 'ArrowDown'],
+            interact: ['KeyE'],
+            shootWire: ['Mouse0'],
+            cutWire: ['Mouse2']
+        };
+
+        this.bindings = JSON.parse(JSON.stringify(this.defaultBindings));
+        this._loadBindings();
+
         this._bindEvents();
     }
 
     setCamera(camera) {
         this.camera = camera;
+    }
+
+    _loadBindings() {
+        try {
+            const raw = localStorage.getItem(this.STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                for (const act of Object.keys(this.defaultBindings)) {
+                    if (Array.isArray(parsed[act]) && parsed[act].length > 0) {
+                        this.bindings[act] = parsed[act];
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[InputManager] Could not load custom bindings:', e);
+        }
+    }
+
+    _saveBindings() {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.bindings));
+        } catch (e) {
+            console.warn('[InputManager] Could not save custom bindings:', e);
+        }
+    }
+
+    rebind(action, code) {
+        if (!this.bindings[action] || !code) return false;
+        this.bindings[action] = [code];
+        this._saveBindings();
+        return true;
+    }
+
+    resetDefaults() {
+        this.bindings = JSON.parse(JSON.stringify(this.defaultBindings));
+        this._saveBindings();
+    }
+
+    getBindingDisplayName(action) {
+        const codes = this.bindings[action] || this.defaultBindings[action] || [];
+        if (!codes.length) return 'NONE';
+
+        const formatCode = (c) => {
+            if (c === 'Mouse0') return 'LMB';
+            if (c === 'Mouse2') return 'RMB';
+            if (c === 'Mouse1') return 'MMB';
+            if (c === 'Space') return 'SPACE';
+            if (c.startsWith('Key')) return c.substring(3);
+            if (c.startsWith('Digit')) return c.substring(5);
+            if (c.startsWith('Arrow')) return c.substring(5).toUpperCase();
+            if (c.startsWith('Shift')) return 'SHIFT';
+            if (c.startsWith('Control')) return 'CTRL';
+            if (c.startsWith('Alt')) return 'ALT';
+            return c;
+        };
+
+        return codes.map(formatCode).join(' / ');
     }
 
     _bindEvents() {
@@ -117,54 +192,68 @@ export class InputManager {
         this.leftReleasedThisFrame = false;
         this.rightReleasedThisFrame = false;
 
-        // Keep mouseWorld synced with moving camera
         this._syncWorldMouse();
     }
 
     // Helper query methods
     isKeyDown(code) {
+        if (code === 'Mouse0') return this.isLeftDown;
+        if (code === 'Mouse2') return this.isRightDown;
         return this.keysDown.has(code);
     }
 
     isKeyPressed(code) {
+        if (code === 'Mouse0') return this.leftPressedThisFrame;
+        if (code === 'Mouse2') return this.rightPressedThisFrame;
         return this.keysPressedThisFrame.has(code);
     }
 
     isKeyReleased(code) {
+        if (code === 'Mouse0') return this.leftReleasedThisFrame;
+        if (code === 'Mouse2') return this.rightReleasedThisFrame;
         return this.keysReleasedThisFrame.has(code);
     }
 
-    // High-level action checks
+    isActionDown(action) {
+        const codes = this.bindings[action] || this.defaultBindings[action] || [];
+        return codes.some(c => this.isKeyDown(c));
+    }
+
+    isActionPressed(action) {
+        const codes = this.bindings[action] || this.defaultBindings[action] || [];
+        return codes.some(c => this.isKeyPressed(c));
+    }
+
+    // High-level action getters
     get moveLeft() {
-        return this.isKeyDown('KeyA') || this.isKeyDown('ArrowLeft');
+        return this.isActionDown('moveLeft');
     }
 
     get moveRight() {
-        return this.isKeyDown('KeyD') || this.isKeyDown('ArrowRight');
+        return this.isActionDown('moveRight');
     }
 
     get moveUp() {
-        return this.isKeyDown('KeyW') || this.isKeyDown('ArrowUp');
+        return this.isActionDown('moveUp');
     }
 
     get moveDown() {
-        return this.isKeyDown('KeyS') || this.isKeyDown('ArrowDown');
+        return this.isActionDown('moveDown');
     }
 
     get isRunning() {
-        return this.isKeyDown('ShiftLeft') || this.isKeyDown('ShiftRight');
+        return false;
     }
 
     get jumpPressed() {
-        return this.isKeyPressed('Space');
+        return this.isActionPressed('jump');
     }
 
     get downPressed() {
-        return this.isKeyPressed('KeyS') || this.isKeyPressed('ArrowDown');
+        return this.isActionPressed('dock');
     }
 
     get interactPressed() {
-        return this.isKeyPressed('KeyE');
+        return this.isActionPressed('interact');
     }
 }
-

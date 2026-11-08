@@ -101,8 +101,7 @@ export class CircuitSystem {
             wasPowered: false,
             deviceId: nodeConfig.deviceId || null,
             neighbors: nodeConfig.neighbors || [],
-            label: nodeConfig.label || '',
-            sparks: []
+            label: nodeConfig.label || ''
         };
 
         this.nodes.set(node.id, node);
@@ -137,19 +136,6 @@ export class CircuitSystem {
                 node.rotationAngle += diff * 0.22;
                 if (Math.abs(diff) < 0.005) {
                     node.rotationAngle = node.targetRotationAngle;
-                }
-            }
-
-            // Update spark particles
-            if (node.sparks && node.sparks.length > 0) {
-                for (let i = node.sparks.length - 1; i >= 0; i--) {
-                    const sp = node.sparks[i];
-                    sp.x += sp.vx * dt;
-                    sp.y += sp.vy * dt;
-                    sp.life -= dt;
-                    if (sp.life <= 0) {
-                        node.sparks.splice(i, 1);
-                    }
                 }
             }
         }
@@ -210,9 +196,6 @@ export class CircuitSystem {
             this.eventBus.emit('BATTERY_CHANGED', this.player.battery);
         }
 
-        // Spawn rotation electrical sparks along metallic dial rim
-        this._spawnDialSparks(node, 10);
-
         // Recalculate global power network
         this.recalculatePower();
 
@@ -221,21 +204,6 @@ export class CircuitSystem {
             nodeId: node.id,
             ports: [...node.ports]
         });
-    }
-
-    _spawnDialSparks(node, count = 8) {
-        for (let i = 0; i < count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 40 + Math.random() * 90;
-            node.sparks.push({
-                x: Math.cos(angle) * this.DIAL_RADIUS,
-                y: Math.sin(angle) * this.DIAL_RADIUS,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                color: Math.random() > 0.4 ? '#4da6ff' : '#ffaa00',
-                life: 0.25 + Math.random() * 0.2
-            });
-        }
     }
 
     /**
@@ -312,16 +280,32 @@ export class CircuitSystem {
         }
     }
 
-    render(ctx) {
+    render(ctx, camera = null) {
         ctx.save();
 
         // 1. Render background conduits
         for (const conduit of this.conduits) {
+            if (camera && typeof camera.isVisible === 'function' && conduit.points && conduit.points.length > 0) {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (let i = 0; i < conduit.points.length; i++) {
+                    const pt = conduit.points[i];
+                    if (pt.x < minX) minX = pt.x;
+                    if (pt.x > maxX) maxX = pt.x;
+                    if (pt.y < minY) minY = pt.y;
+                    if (pt.y > maxY) maxY = pt.y;
+                }
+                if (!camera.isVisible(minX, minY, Math.max(32, maxX - minX), Math.max(32, maxY - minY), 32)) {
+                    continue;
+                }
+            }
             this._renderConduit(ctx, conduit);
         }
 
         // 2. Render circular wall dials
         for (const node of this.nodes.values()) {
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(node.x - 16, node.y - 16, 32, 32, 32)) {
+                continue;
+            }
             this._renderDialNode(ctx, node);
         }
 
@@ -417,14 +401,6 @@ export class CircuitSystem {
 
             // Center plug socket contact
             this._renderCenterSocket(ctx, node);
-
-            // Dial rotation sparks
-            if (node.sparks && node.sparks.length > 0) {
-                for (const sp of node.sparks) {
-                    ctx.fillStyle = sp.color;
-                    ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
-                }
-            }
         } else {
             // Minimalist fallback
             ctx.fillStyle = node.isPowered ? '#ffaa00' : '#204a6e';

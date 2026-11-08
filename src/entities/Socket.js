@@ -31,23 +31,6 @@ export class Socket {
         ctx.save();
         ctx.translate(this.x, this.y);
 
-        // Highlight ring when player is in range (subtle, non-intrusive)
-        if (this.isHighlighted) {
-            const pulse = 1 + Math.sin(this.pulsePhase) * 0.12;
-            const r = (this.radius + 2) * pulse;
-            ctx.strokeStyle = this.type === 'CHARGER'
-                ? '#00e676'
-                : this.type === 'CIRCUIT'
-                ? '#4da6ff'
-                : '#00ddff';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-
         // For CIRCUIT sockets, CircuitSystem draws the 32x32 rotatable dial tile
         if (this.type === 'CIRCUIT') {
             if (this.isPlugged) {
@@ -86,7 +69,7 @@ export class Socket {
             } else {
                 ctx.fillStyle = '#22252a';
                 ctx.fillRect(-12, -12, 24, 24);
-                ctx.fillStyle = '#00ddff';
+                ctx.fillStyle = '#4a5a6e';
                 ctx.beginPath();
                 ctx.arc(0, 0, 5, 0, Math.PI * 2);
                 ctx.fill();

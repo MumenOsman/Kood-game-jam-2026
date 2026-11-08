@@ -17,7 +17,6 @@ export class HazardSystem {
         this.level = level;
 
         this.pulseTime = 0;
-        this.sparkParticles = [];
 
         this._bindEvents();
     }
@@ -44,23 +43,28 @@ export class HazardSystem {
         });
     }
 
+    _getHazards() {
+        if (!this.level) return [];
+        if (typeof this.level.getHazardColliders === 'function') {
+            return this.level.getHazardColliders();
+        }
+        return (this.level.colliders || []).filter(c => c.isHazard === true);
+    }
+
     _setDeviceElectrified(deviceId, state) {
         if (!this.level) return;
-        const colliders = this.level.getSolidColliders();
-        for (const col of colliders) {
+        const hazards = this._getHazards();
+        for (const col of hazards) {
             if (col.deviceId === deviceId) {
                 col.isElectrified = state;
-                const cx = col.x + col.width / 2;
-                const cy = col.y + col.height / 2;
-                this._spawnSparks(cx, cy, state ? '#ff4081' : '#00e5ff', 16);
             }
         }
     }
 
     _toggleDeviceElectrified(deviceId) {
         if (!this.level) return;
-        const colliders = this.level.getSolidColliders();
-        for (const col of colliders) {
+        const hazards = this._getHazards();
+        for (const col of hazards) {
             if (col.deviceId === deviceId) {
                 this._setDeviceElectrified(deviceId, !col.isElectrified);
             }
@@ -69,7 +73,6 @@ export class HazardSystem {
 
     update(dt) {
         this.pulseTime += dt * 12;
-        this._updateSparks(dt);
 
         if (!this.level || !this.player) return;
 
@@ -80,17 +83,85 @@ export class HazardSystem {
         }
 
         const pBounds = p.getBounds();
-        const colliders = this.level.getSolidColliders();
+        const hazards = this._getHazards().filter(c => c.isElectrified);
 
-        for (const col of colliders) {
-            if (!col.isElectrified) continue;
-
-            // Check collision with the electrified hazard
-            if (this._checkAABB(pBounds, col)) {
+        for (const col of hazards) {
+            // Check lethal contact with active electrified hazard
+            if (this._checkHazardContact(p, pBounds, col)) {
                 this._triggerShock(col);
                 break;
             }
         }
+    }
+
+    _checkHazardContact(p, pBounds, col) {
+        const rawFace = col.electrifiedFace || 'all';
+        const face = rawFace.toLowerCase();
+        const isCorridorBeam = Boolean(col.isCorridorBeam) || 
+                               face === 'beam' ||
+                               ((face === 'all' || face === 'all_sides') && col.width > col.height && col.width <= 128);
+
+        if (isCorridorBeam) {
+            // Horizontal laser beam spanning across a corridor or shaft
+            const midY = col.y + col.height / 2;
+            const beamLeft = col.x;
+            const beamRight = col.x + col.width;
+            return (
+                pBounds.x < beamRight &&
+                pBounds.x + pBounds.width > beamLeft &&
+                pBounds.y < midY + 10 &&
+                pBounds.y + pBounds.height > midY - 10
+            );
+        }
+
+        if (face === 'top' || face === 'up') {
+            // Floor laser: lethal threshold extends 10px above the floor into the player's feet
+            return (
+                pBounds.x < col.x + col.width &&
+                pBounds.x + pBounds.width > col.x &&
+                pBounds.y < col.y + col.height &&
+                pBounds.y + pBounds.height >= col.y - 10
+            );
+        }
+
+        if (face === 'bottom' || face === 'down') {
+            // Ceiling laser: extends 10px below ceiling
+            return (
+                pBounds.x < col.x + col.width &&
+                pBounds.x + pBounds.width > col.x &&
+                pBounds.y <= col.y + col.height + 10 &&
+                pBounds.y + pBounds.height > col.y
+            );
+        }
+
+        if (face === 'right') {
+            // Right-facing wall hazard (e.g. wall runner in Room 5)
+            // Extends 8px to the right of the wall face
+            return (
+                pBounds.x < col.x + col.width + 8 &&
+                pBounds.x + pBounds.width > col.x &&
+                pBounds.y < col.y + col.height &&
+                pBounds.y + pBounds.height > col.y
+            );
+        }
+
+        if (face === 'left') {
+            // Left-facing wall hazard
+            return (
+                pBounds.x < col.x + col.width &&
+                pBounds.x + pBounds.width > col.x - 8 &&
+                pBounds.y < col.y + col.height &&
+                pBounds.y + pBounds.height > col.y
+            );
+        }
+
+        // Standard 4-sided bounding box contact
+        return (
+            pBounds.x < col.x + col.width &&
+            pBounds.x + pBounds.width > col.x &&
+            pBounds.y < col.y + col.height &&
+            pBounds.y + pBounds.height > col.y
+        );
     }
 
     _triggerShock(col) {
@@ -135,15 +206,11 @@ export class HazardSystem {
 
         p.shockInvulnTimer = 0.45; // 450ms invulnerability window
 
-        // Spawn high-voltage shock burst particles
-        this._spawnSparks(playerCenterX, playerCenterY, '#ff4081', 20);
-        this._spawnSparks(playerCenterX, playerCenterY, '#00e5ff', 12);
-
-        this.eventBus.emit('PLAYER_SHOCKED', {
-            damage,
-            knockbackX: kbX,
-            knockbackY: kbY,
-            deviceId: col.deviceId
+        // Security grid laser contact triggers immediate respawn at sector entrance (zero energy drain)
+        this.eventBus.emit('PLAYER_LASER_CONTACT', {
+            deviceId: col.deviceId,
+            x: playerCenterX,
+            y: playerCenterY
         });
     }
 
@@ -156,175 +223,81 @@ export class HazardSystem {
         );
     }
 
-    _spawnSparks(x, y, color, count = 10) {
-        for (let i = 0; i < count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 70 + Math.random() * 160;
-            this.sparkParticles.push({
-                x, y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                color,
-                life: 0.25 + Math.random() * 0.25
-            });
-        }
-    }
-
-    _updateSparks(dt) {
-        for (let i = this.sparkParticles.length - 1; i >= 0; i--) {
-            const sp = this.sparkParticles[i];
-            sp.x += sp.vx * dt;
-            sp.y += sp.vy * dt;
-            sp.life -= dt;
-            if (sp.life <= 0) {
-                this.sparkParticles.splice(i, 1);
-            }
-        }
-    }
-
-    render(ctx) {
+    render(ctx, camera = null) {
         ctx.save();
 
         if (this.level) {
-            const colliders = this.level.getSolidColliders();
-            for (const col of colliders) {
-                if (col.isElectrified) {
-                    this._renderElectrifiedSurface(ctx, col);
-                } else if (col.deviceId && col.isElectrified === false) {
-                    this._renderDeElectrifiedSurface(ctx, col);
+            const hazards = this._getHazards().filter(c => c.isElectrified);
+            for (const col of hazards) {
+                if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(col.x, col.y, col.width, col.height, 32)) {
+                    continue;
+                }
+
+                const rawFace = col.electrifiedFace || 'all';
+                const face = rawFace.toLowerCase();
+
+                const segments = [];
+                // Check if this is a horizontal corridor beam (e.g. spanning wall-run shaft or tagged isCorridorBeam)
+                const isCorridorBeam = Boolean(col.isCorridorBeam) || 
+                                       face === 'beam' ||
+                                       ((face === 'all' || face === 'all_sides') && col.width > col.height && col.width <= 128);
+
+                if (isCorridorBeam) {
+                    const midY = col.y + col.height / 2;
+                    segments.push({ x1: col.x, y1: midY, x2: col.x + col.width, y2: midY, isHoriz: true });
+                } else if (face === 'top' || face === 'up') {
+                    segments.push({ x1: col.x, y1: col.y, x2: col.x + col.width, y2: col.y, isHoriz: true });
+                } else if (face === 'bottom' || face === 'down') {
+                    segments.push({ x1: col.x, y1: col.y + col.height, x2: col.x + col.width, y2: col.y + col.height, isHoriz: true });
+                } else if (face === 'left') {
+                    segments.push({ x1: col.x, y1: col.y, x2: col.x, y2: col.y + col.height, isHoriz: false });
+                } else if (face === 'right') {
+                    segments.push({ x1: col.x + col.width, y1: col.y, x2: col.x + col.width, y2: col.y + col.height, isHoriz: false });
+                } else {
+                    // all sides
+                    segments.push({ x1: col.x, y1: col.y, x2: col.x + col.width, y2: col.y, isHoriz: true });
+                    segments.push({ x1: col.x + col.width, y1: col.y, x2: col.x + col.width, y2: col.y + col.height, isHoriz: false });
+                    segments.push({ x1: col.x, y1: col.y + col.height, x2: col.x + col.width, y2: col.y + col.height, isHoriz: true });
+                    segments.push({ x1: col.x, y1: col.y, x2: col.x, y2: col.y + col.height, isHoriz: false });
+                }
+
+                for (const seg of segments) {
+                    this._renderLaserBeam(ctx, seg.x1, seg.y1, seg.x2, seg.y2, seg.isHoriz);
                 }
             }
         }
 
-        // Render spark particles
-        for (const sp of this.sparkParticles) {
-            ctx.fillStyle = sp.color;
-            ctx.fillRect(sp.x - 1.5, sp.y - 1.5, 3, 3);
-        }
-
         ctx.restore();
     }
 
-    _renderElectrifiedSurface(ctx, col) {
-        ctx.save();
-        const face = col.electrifiedFace || 'all';
+    _renderLaserBeam(ctx, x1, y1, x2, y2, isHoriz) {
+        const length = isHoriz ? Math.abs(x2 - x1) : Math.abs(y2 - y1);
+        if (length <= 0) return;
 
-        // Helper to draw electric arc along any segment
-        const drawArc = (x1, y1, x2, y2) => {
-            this._renderArcSegment(ctx, x1, y1, x2, y2);
+        // 1. Emitter Node End-Caps (Industrial dark metal chassis with laser diode)
+        const drawEmitter = (x, y) => {
+            ctx.fillStyle = '#1c2430';
+            ctx.fillRect(x - 3, y - 3, 6, 6);
+            ctx.fillStyle = '#d62828';
+            ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
         };
+        drawEmitter(x1, y1);
+        drawEmitter(x2, y2);
 
-        if (face === 'right') {
-            drawArc(col.x + col.width, col.y, col.x + col.width, col.y + col.height);
-        } else if (face === 'left') {
-            drawArc(col.x, col.y, col.x, col.y + col.height);
-        } else if (face === 'top') {
-            drawArc(col.x, col.y, col.x + col.width, col.y);
-        } else if (face === 'bottom') {
-            drawArc(col.x, col.y + col.height, col.x + col.width, col.y + col.height);
-        } else {
-            // 'all': render perimeter box
-            drawArc(col.x, col.y, col.x + col.width, col.y);
-            drawArc(col.x + col.width, col.y, col.x + col.width, col.y + col.height);
-            drawArc(col.x + col.width, col.y + col.height, col.x, col.y + col.height);
-            drawArc(col.x, col.y + col.height, col.x, col.y);
-        }
-
-        ctx.restore();
-    }
-
-    _renderArcSegment(ctx, x1, y1, x2, y2) {
-        const len = Math.hypot(x2 - x1, y2 - y1);
-        if (len < 4) return;
-
-        const dx = (x2 - x1) / len;
-        const dy = (y2 - y1) / len;
-        // Normal vector pointing perpendicular to segment
-        const nx = -dy;
-        const ny = dx;
-
-        // 1. Hazard glow backdrop along line
-        ctx.strokeStyle = 'rgba(255, 64, 129, 0.4)';
-        ctx.lineWidth = 14;
+        // 2. Outer Solid High-Contrast Red Laser Line
+        ctx.strokeStyle = '#d62828';
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
 
-        // 2. High-voltage animated electric crackle arcs (squiggly lightning)
-        const segments = Math.max(5, Math.floor(len / 18));
-        const segLen = len / segments;
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        for (let i = 1; i <= segments; i++) {
-            const currentDist = i * segLen;
-            const baseX = x1 + dx * currentDist;
-            const baseY = y1 + dy * currentDist;
-            const jitter = Math.sin(this.pulseTime + i * 1.8) * 6 + Math.cos(this.pulseTime * 2 + i) * 3;
-            ctx.lineTo(baseX + nx * jitter, baseY + ny * jitter);
-        }
-        ctx.strokeStyle = '#ff4081';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Inner white/cyan core
-        ctx.strokeStyle = '#ffffff';
+        // 3. Inner White-Pink High-Intensity Core Line
+        ctx.strokeStyle = '#fff0f3';
         ctx.lineWidth = 1.2;
-        ctx.stroke();
-
-        // Secondary counter-phase lightning arc
         ctx.beginPath();
         ctx.moveTo(x1, y1);
-        for (let i = 1; i <= segments; i++) {
-            const currentDist = i * segLen;
-            const baseX = x1 + dx * currentDist;
-            const baseY = y1 + dy * currentDist;
-            const jitter = Math.cos(this.pulseTime * 1.5 + i * 2.2) * 5;
-            ctx.lineTo(baseX + nx * jitter, baseY + ny * jitter);
-        }
-        ctx.strokeStyle = '#00e5ff';
-        ctx.lineWidth = 1.8;
+        ctx.lineTo(x2, y2);
         ctx.stroke();
-
-        // 3. Hazard warning status lights at ends
-        ctx.fillStyle = '#ff1744';
-        ctx.beginPath();
-        ctx.arc(x1 + dx * 10, y1 + dy * 10, 4, 0, Math.PI * 2);
-        ctx.arc(x2 - dx * 10, y2 - dy * 10, 4, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    _renderDeElectrifiedSurface(ctx, col) {
-        ctx.save();
-        const face = col.electrifiedFace || 'all';
-
-        const drawSafeLights = (x1, y1, x2, y2) => {
-            const len = Math.hypot(x2 - x1, y2 - y1);
-            if (len < 4) return;
-            const dx = (x2 - x1) / len;
-            const dy = (y2 - y1) / len;
-
-            ctx.fillStyle = '#00e676';
-            ctx.beginPath();
-            ctx.arc(x1 + dx * 12, y1 + dy * 12, 3.5, 0, Math.PI * 2);
-            ctx.arc(x2 - dx * 12, y2 - dy * 12, 3.5, 0, Math.PI * 2);
-            ctx.fill();
-        };
-
-        if (face === 'right') {
-            drawSafeLights(col.x + col.width, col.y, col.x + col.width, col.y + col.height);
-        } else if (face === 'left') {
-            drawSafeLights(col.x, col.y, col.x, col.y + col.height);
-        } else if (face === 'top') {
-            drawSafeLights(col.x, col.y, col.x + col.width, col.y);
-        } else if (face === 'bottom') {
-            drawSafeLights(col.x, col.y + col.height, col.x + col.width, col.y + col.height);
-        } else {
-            drawSafeLights(col.x, col.y, col.x + col.width, col.y);
-            drawSafeLights(col.x, col.y + col.height, col.x + col.width, col.y + col.height);
-        }
-
-        ctx.restore();
     }
 }

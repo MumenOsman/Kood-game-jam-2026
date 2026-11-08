@@ -438,9 +438,8 @@ export class TestRoom extends Level {
 
         // Zone 1: Spawn
         ctx.fillText('CHAMBER 01 - SYSTEM DIAGNOSTICS', 100, 240);
-        ctx.fillText('[A] / [D] : WALK', 100, 275);
-        ctx.fillText('[SHIFT]   : RUN', 100, 300);
-        ctx.fillText('[S]       : DOCK / REST', 100, 325);
+        ctx.fillText('[A] / [D] : MOVE', 100, 275);
+        ctx.fillText('[S]       : DOCK / REST', 100, 305);
 
         // Zone 2: Jump
         ctx.fillText('CHASM TRANSIT', 900, 300);

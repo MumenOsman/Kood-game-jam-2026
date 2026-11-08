@@ -32,16 +32,36 @@ export class Camera {
         this._computeScale();
     }
 
-    setRoomMode(roomWidth = 640, roomHeight = 320, totalRooms = 3) {
+    setRoomMode(roomParam = 640, roomHeight = 320, totalRooms = 3) {
         this.isRoomMode = true;
-        this.roomWidth = roomWidth;
-        this.roomHeight = roomHeight;
-        this.totalRooms = totalRooms;
         this.currentRoomIndex = 0;
         this.targetX = 0;
         this.targetY = 0;
         this.x = 0;
         this.y = 0;
+
+        if (Array.isArray(roomParam) && roomParam.length > 0) {
+            this.rooms = roomParam;
+            this.roomWidth = this.rooms[0].pxWid || 640;
+            this.roomHeight = this.rooms[0].pxHei || 320;
+            this.totalRooms = this.rooms.length;
+        } else {
+            this.roomWidth = typeof roomParam === 'number' ? roomParam : 640;
+            this.roomHeight = roomHeight;
+            this.totalRooms = totalRooms;
+            this.rooms = [];
+            for (let i = 0; i < this.totalRooms; i++) {
+                this.rooms.push({
+                    index: i,
+                    id: `Room_${i}`,
+                    worldX: i * this.roomWidth,
+                    worldY: 0,
+                    pxWid: this.roomWidth,
+                    pxHei: this.roomHeight
+                });
+            }
+        }
+
         this._computeScale();
     }
 
@@ -59,7 +79,7 @@ export class Camera {
             return;
         }
 
-        // Fit 640x320 room inside current canvas maintaining aspect ratio
+        // Fit room width x height inside canvas maintaining aspect ratio
         const scaleX = this.viewportWidth / this.roomWidth;
         const scaleY = this.viewportHeight / this.roomHeight;
         this.scale = Math.min(scaleX, scaleY);
@@ -72,7 +92,7 @@ export class Camera {
     }
 
     /**
-     * Follow player across room boundaries with Celeste-style smooth slide
+     * Follow player across room boundaries with Instant Room Cut
      */
     follow(target) {
         if (!this.isRoomMode) {
@@ -82,22 +102,61 @@ export class Camera {
             return;
         }
 
-        // Room tracking: determine which 640x320 room player is in
-        const room = Math.max(0, Math.min(this.totalRooms - 1, Math.floor(target.x / this.roomWidth)));
-        this.currentRoomIndex = room;
-        this.targetX = room * this.roomWidth;
-        this.targetY = 0;
+        const px = target.x + (target.width || 32) / 2;
+        const py = target.y + (target.height || 32) / 2;
+
+        let found = this.rooms ? this.rooms.find(r =>
+            px >= r.worldX && px < r.worldX + r.pxWid &&
+            py >= r.worldY && py < r.worldY + r.pxHei
+        ) : null;
+
+        if (!found && this.rooms && this.rooms.length > 0) {
+            // Fallback: pick closest room by distance to center
+            let closest = this.rooms[0];
+            let minDist = Infinity;
+            for (const r of this.rooms) {
+                const cx = r.worldX + r.pxWid / 2;
+                const cy = r.worldY + r.pxHei / 2;
+                const d = Math.hypot(cx - px, cy - py);
+                if (d < minDist) {
+                    minDist = d;
+                    closest = r;
+                }
+            }
+            found = closest;
+        }
+
+        if (found) {
+            if (this.currentRoomIndex !== found.index) {
+                this.currentRoomIndex = found.index;
+                this.targetX = found.worldX;
+                this.targetY = found.worldY;
+                // Instant Room Cut: zero lerp delay on room transition
+                this.x = this.targetX;
+                this.y = this.targetY;
+            }
+        }
     }
 
     snapTo(x, y) {
         if (this.isRoomMode) {
-            const room = Math.max(0, Math.min(this.totalRooms - 1, Math.floor(x / this.roomWidth)));
-            this.currentRoomIndex = room;
-            this.targetX = room * this.roomWidth;
-            this.targetY = 0;
-            this.x = this.targetX;
-            this.y = this.targetY;
-            return;
+            let found = this.rooms ? this.rooms.find(r =>
+                x >= r.worldX && x < r.worldX + r.pxWid &&
+                y >= r.worldY && y < r.worldY + r.pxHei
+            ) : null;
+
+            if (!found && this.rooms && this.rooms.length > 0) {
+                found = this.rooms[0];
+            }
+
+            if (found) {
+                this.currentRoomIndex = found.index;
+                this.targetX = found.worldX;
+                this.targetY = found.worldY;
+                this.x = this.targetX;
+                this.y = this.targetY;
+                return;
+            }
         }
 
         this.x = x - this.viewportWidth / 2;
@@ -107,8 +166,13 @@ export class Camera {
     }
 
     update() {
-        this.x += (this.targetX - this.x) * this.smoothness;
-        this.y += (this.targetY - this.y) * this.smoothness;
+        if (this.isRoomMode) {
+            this.x = this.targetX;
+            this.y = this.targetY;
+        } else {
+            this.x += (this.targetX - this.x) * this.smoothness;
+            this.y += (this.targetY - this.y) * this.smoothness;
+        }
     }
 
     applyTransform(ctx) {
@@ -142,5 +206,26 @@ export class Camera {
             x: (wx - this.x) * this.scale + this.offsetX,
             y: (wy - this.y) * this.scale + this.offsetY
         };
+    }
+
+    getVisibleBounds(padding = 32) {
+        const w = this.isRoomMode ? this.roomWidth : this.viewportWidth;
+        const h = this.isRoomMode ? this.roomHeight : this.viewportHeight;
+        return {
+            left: this.x - padding,
+            top: this.y - padding,
+            right: this.x + w + padding,
+            bottom: this.y + h + padding
+        };
+    }
+
+    isVisible(x, y, width, height, padding = 32) {
+        const b = this.getVisibleBounds(padding);
+        return (
+            x + width >= b.left &&
+            x <= b.right &&
+            y + height >= b.top &&
+            y <= b.bottom
+        );
     }
 }

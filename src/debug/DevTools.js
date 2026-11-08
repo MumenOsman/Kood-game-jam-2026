@@ -22,12 +22,12 @@ export class DevTools {
         this.hud = ctx.hud;
         this.canvas = ctx.canvas;
 
-        // Toggle state
-        this.isEnabled = true;
-        this.showTelemetry = true;
-        this.showHitboxes = true;
-        this.showTrajectory = true;
-        this.showRuler = true;
+        // Toggle state (starts closed; press ` or F1 to open)
+        this.isEnabled = false;
+        this.showTelemetry = false;
+        this.showHitboxes = false;
+        this.showTrajectory = false;
+        this.showRuler = false;
         this.showTuningPanel = false;
 
         // Trajectory recording buffer (3 seconds at 60Hz = 180 samples)
@@ -428,28 +428,7 @@ export class DevTools {
     }
 
     _renderSocketGizmos(ctx) {
-        if (!this.level) return;
-        ctx.save();
-
-        const sockets = this.level.getSockets();
-        for (const sock of sockets) {
-            // Magnetic capture snap radius (30px)
-            ctx.strokeStyle = 'rgba(0, 230, 118, 0.5)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            ctx.arc(sock.x, sock.y, 30, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Wire proximity highlight boundary (280px)
-            ctx.strokeStyle = 'rgba(77, 166, 255, 0.2)';
-            ctx.beginPath();
-            ctx.arc(sock.x, sock.y, 280, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-
-        ctx.restore();
+        // Socket debug gizmos disabled
     }
 
     _renderPendulumConstraint(ctx) {
@@ -568,7 +547,7 @@ export class DevTools {
         // State string
         let stateStr = 'AIRBORNE';
         if (p.isGrounded) stateStr = p.isResting ? 'RESTING / DOCKED' : 'GROUNDED';
-        else if (p.isWallSliding) stateStr = `WALL SLIDING [${p.wallSlideDirection === -1 ? 'LEFT' : 'RIGHT'}]`;
+        else if (p.isWallSliding) stateStr = p.vy > 150 ? `WALL SLIDE [${p.wallSlideDirection === -1 ? 'LEFT' : 'RIGHT'}] (FAST)` : `WALL SLIDE [${p.wallSlideDirection === -1 ? 'LEFT' : 'RIGHT'}]`;
         else if (p.isTethered) stateStr = 'TETHERED / SWINGING';
 
         ctx.fillStyle = '#b0bec5';
@@ -658,6 +637,7 @@ export class DevTools {
         this.styleEl.id = 'devtools-style';
         this.styleEl.textContent = `
             #devToolsSidebar {
+                display: none;
                 position: fixed;
                 top: 12px;
                 left: 12px;
@@ -787,6 +767,7 @@ export class DevTools {
 
         this.panelEl = document.createElement('div');
         this.panelEl.id = 'devToolsSidebar';
+        this.panelEl.style.display = 'none';
 
         this.panelEl.innerHTML = `
             <div class="dt-header">
@@ -851,12 +832,12 @@ export class DevTools {
                     </div>
                     <div class="dt-row">
                         <span class="dt-label">Wall Jump Up (sq)</span>
-                        <input type="range" class="dt-slider" id="dt_wallJumpUpSquares" min="1.0" max="4.0" step="0.25" />
+                        <input type="range" class="dt-slider" id="dt_wallJumpUpSquares" min="1.0" max="4.0" step="0.1" />
                         <span class="dt-val" id="val_wallJumpUpSquares"></span>
                     </div>
                     <div class="dt-row">
                         <span class="dt-label">Wall Jump Out (sq)</span>
-                        <input type="range" class="dt-slider" id="dt_wallJumpOutSquares" min="1.0" max="4.0" step="0.25" />
+                        <input type="range" class="dt-slider" id="dt_wallJumpOutSquares" min="1.0" max="4.0" step="0.1" />
                         <span class="dt-val" id="val_wallJumpOutSquares"></span>
                     </div>
                 </div>

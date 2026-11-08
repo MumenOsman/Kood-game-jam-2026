@@ -25,6 +25,7 @@ export class Level {
             y: config.y,
             width: config.width,
             height: config.height,
+            isHazard: Boolean(config.isHazard),
             isWallRunnable: Boolean(config.isWallRunnable),
             wallRunFace: config.wallRunFace || 'both', // 'left', 'right', or 'both'
             isElectrified: Boolean(config.isElectrified),
@@ -61,6 +62,7 @@ export class Level {
     addHazardObject(config) {
         return this.addCollider({
             ...config,
+            isHazard: true,
             isElectrified: config.isElectrified !== undefined ? config.isElectrified : true,
             electrifiedFace: config.electrifiedFace || 'all',
             deviceId: config.deviceId || null,
@@ -70,7 +72,7 @@ export class Level {
     }
 
     getSolidColliders() {
-        return this.colliders;
+        return this.colliders.filter(c => !c.isHazard || c.isWallRunnable);
     }
 
     getWallRunColliders() {
@@ -78,7 +80,7 @@ export class Level {
     }
 
     getHazardColliders() {
-        return this.colliders.filter(c => c.isElectrified === true);
+        return this.colliders.filter(c => c.isHazard === true);
     }
 
     getSockets() {
@@ -114,16 +116,20 @@ export class Level {
     /**
      * Visual helper to render tactile friction grip runners on all wall-runnable surfaces
      */
-    renderWallRunGripStrips(ctx) {
+    renderWallRunGripStrips(ctx, camera = null) {
         ctx.save();
         const wallRunColliders = this.getWallRunColliders();
         for (const col of wallRunColliders) {
             // If currently electrified, hazard arcs take visual precedence
             if (col.isElectrified) continue;
 
+            if (camera && typeof camera.isVisible === 'function' && !camera.isVisible(col.x, col.y, col.width, col.height, 32)) {
+                continue;
+            }
+
             const face = col.wallRunFace || 'both';
             const drawGrip = (xPos) => {
-                ctx.fillStyle = '#00bcd4';
+                ctx.fillStyle = '#3a4e66';
                 const step = 22;
                 for (let y = col.y + 12; y < col.y + col.height - 12; y += step) {
                     ctx.fillRect(xPos - 2, y, 4, 3);
