@@ -95,7 +95,7 @@ export class CreditFlightScene {
         }
     }
 
-    startHangarTakeoff(data) {
+    startHangarTakeoff(data, camera = null) {
         this.state = FLIGHT_STATE.HANGAR_TAKEOFF;
         this.x = data.x;
         this.y = data.y;
@@ -105,7 +105,23 @@ export class CreditFlightScene {
         this.vx = 60;
         this.vy = 0;
 
+        if (camera) {
+            camera.snapTo(this.x + this.width / 2, this.y + this.height / 2);
+        }
+
         // Switch to special level music
+        try {
+            if (this.audio) {
+                this.audio.playMusic('special_level', true);
+                this.audio.playFx('start_game', 0.9);
+            }
+        } catch (e) {
+            console.warn('[CreditFlightScene] Audio start error:', e);
+        }
+    }
+
+    startFlightRunnerDirectly() {
+        this._transitionToFlightRunner();
         try {
             if (this.audio) {
                 this.audio.playMusic('special_level', true);
@@ -206,12 +222,15 @@ export class CreditFlightScene {
             const exitX = rm.worldX + rm.pxWid - 48;
             if (this.x >= exitX) {
                 this._transitionToFlightRunner();
+                return; // Return immediately to prevent snapping world camera after switching to screen coordinates
             }
         }
 
         // Smooth camera follow in hangar
-        if (camera) {
-            camera.snapTo(this.x + this.width / 2, this.y + this.height / 2);
+        if (camera && rm) {
+            const camTargetX = Math.min(rm.worldX + rm.pxWid - 320, Math.max(rm.worldX + 320, this.x + this.width / 2));
+            const camTargetY = rm.worldY + rm.pxHei / 2;
+            camera.snapTo(camTargetX, camTargetY);
         }
     }
 
@@ -313,13 +332,13 @@ export class CreditFlightScene {
     }
 
     _spawnObstacle(creditItem) {
-        // Estimate obstacle box width based on text length
-        const baseW = Math.max(200, Math.min(340, creditItem.text.length * 14 + 50));
-        const baseH = 68;
+        // Generous obstacle frame width & height for comfortable reading
+        const baseW = Math.max(300, Math.min(520, creditItem.text.length * 19 + 70));
+        const baseH = creditItem.isTitle ? 92 : 80;
 
         // Randomized vertical position in reachable flight zone
-        const minY = 80;
-        const maxY = this.screenHeight - baseH - 80;
+        const minY = 70;
+        const maxY = this.screenHeight - baseH - 70;
         const spawnY = Math.round(minY + Math.random() * (maxY - minY));
 
         this.activeObstacles.push({
@@ -346,26 +365,10 @@ export class CreditFlightScene {
     _onObstacleHit(obs) {
         obs.hit = true;
         this.hitCooldown = 0.45;
-        this.screenShake = 5;
+        this.screenShake = 3;
 
         if (this.audio) {
             this.audio.playFx('bump', 0.8);
-        }
-
-        // Spawn gold/cyan impact spark particles
-        const contactX = this.x + this.width - 20;
-        const contactY = this.y + this.height / 2;
-        for (let i = 0; i < 14; i++) {
-            const angle = (Math.PI * 2 * Math.random());
-            const speed = 120 + Math.random() * 200;
-            this.particles.push({
-                x: contactX,
-                y: contactY,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                life: 0.35 + Math.random() * 0.25,
-                color: (i % 2 === 0) ? '#ffcc00' : '#4deeea'
-            });
         }
     }
 
@@ -375,20 +378,13 @@ export class CreditFlightScene {
         this.vx += 1800 * dt;
         this.x += this.vx * dt;
 
-        // Extra thruster exhaust particles
-        if (Math.random() < 0.6) {
-            this.particles.push({
-                x: this.x - 20,
-                y: this.y + this.height / 2 + (Math.random() - 0.5) * 20,
-                vx: -800 - Math.random() * 400,
-                vy: (Math.random() - 0.5) * 100,
-                life: 0.4,
-                color: '#ffaa00'
-            });
-        }
-
         if (this.x > this.screenWidth + 300) {
             this.state = FLIGHT_STATE.COMPLETED;
+            if (this.onComplete) {
+                this.onComplete();
+            }
+        }
+    }
             if (typeof this.onComplete === 'function') {
                 this.onComplete();
             }
@@ -472,13 +468,7 @@ export class CreditFlightScene {
             this._renderObstacle(ctx, obs);
         }
 
-        // 3. Render Spark Particles
-        for (const p of this.particles) {
-            ctx.fillStyle = p.color;
-            ctx.fillRect(Math.round(p.x), Math.round(p.y), 3, 3);
-        }
-
-        // 4. Render Spaceship with Banking Tilt
+        // 3. Render Spaceship with Banking Tilt
         ctx.save();
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
@@ -521,7 +511,7 @@ export class CreditFlightScene {
 
         ctx.restore();
 
-        // 5. High-speed flight lines during hyperdrive
+        // 4. High-speed flight lines during hyperdrive
         if (this.state === FLIGHT_STATE.HYPERDRIVE_EXIT) {
             ctx.strokeStyle = 'rgba(255, 220, 100, 0.6)';
             ctx.lineWidth = 2;
@@ -554,26 +544,29 @@ export class CreditFlightScene {
         }
 
         // 2. Dark inner obsidian backing for ultra-crisp typography
-        ctx.fillStyle = obs.hit ? 'rgba(230, 80, 50, 0.45)' : 'rgba(8, 12, 18, 0.88)';
-        ctx.fillRect(ox + 12, oy + 12, ow - 24, oh - 24);
+        ctx.fillStyle = obs.hit ? 'rgba(230, 80, 50, 0.45)' : 'rgba(8, 12, 18, 0.92)';
+        ctx.fillRect(ox + 10, oy + 10, ow - 20, oh - 20);
 
-        // 3. Drop Shadow & Credit Text
+        // 3. Drop Shadow & High-Legibility Credit Text
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const fontSize = obs.isTitle ? '17px' : '14px';
-        ctx.font = `${fontSize} CyberpunkPixel, monospace`;
+        const fontSize = obs.isTitle ? '22px' : '18px';
+        ctx.font = `bold ${fontSize} 'CyberpunkPixel', 'Courier New', monospace`;
 
         const textX = ox + ow / 2;
         const textY = oy + oh / 2;
 
-        // Drop shadow
-        ctx.fillStyle = '#030508';
-        ctx.fillText(obs.text, textX + 1.5, textY + 1.5);
+        // Razor-sharp drop shadow
+        ctx.fillStyle = '#000000';
+        ctx.fillText(obs.text, textX + 2, textY + 2);
 
         // Foreground text (golden for titles, crisp white for body)
         ctx.fillStyle = obs.isTitle ? '#f4b03c' : '#ffffff';
         ctx.fillText(obs.text, textX, textY);
+
+        ctx.restore();
+    }
 
         ctx.restore();
     }

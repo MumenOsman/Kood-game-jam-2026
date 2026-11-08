@@ -249,6 +249,17 @@ async function bootstrap() {
         onSelectLevel: (roomIndex) => {
             isGameCompleted = false;
             wireSystem.disconnectWire();
+
+            if (roomIndex === 12) {
+                const targetIdx = Math.max(0, Math.min(level.totalRooms - 1, 12));
+                level.activeRoomIndex = targetIdx;
+                player.isVisible = false;
+                if (creditFlightScene) {
+                    creditFlightScene.startFlightRunnerDirectly();
+                }
+                return;
+            }
+
             if (creditFlightScene) {
                 creditFlightScene.state = FLIGHT_STATE.INACTIVE;
                 player.isVisible = true;

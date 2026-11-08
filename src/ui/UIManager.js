@@ -173,7 +173,7 @@ export class UIManager {
     handleSelectLevel(roomIndex) {
         this.state = 'PLAYING';
         if (this.audio) {
-            this.audio.playMusic('game_levels');
+            this.audio.playMusic(roomIndex === 12 ? 'special_level' : 'game_levels');
         }
         if (this.onSelectLevel) {
             this.onSelectLevel(roomIndex);

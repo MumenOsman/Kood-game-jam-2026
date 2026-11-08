@@ -146,7 +146,19 @@ export class Camera {
             ) : null;
 
             if (!found && this.rooms && this.rooms.length > 0) {
-                found = this.rooms[0];
+                // Fallback: pick closest room by distance to center instead of blindly jumping to room 0
+                let closest = this.rooms[0];
+                let minDist = Infinity;
+                for (const r of this.rooms) {
+                    const cx = r.worldX + r.pxWid / 2;
+                    const cy = r.worldY + r.pxHei / 2;
+                    const d = Math.hypot(cx - x, cy - y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closest = r;
+                    }
+                }
+                found = closest;
             }
 
             if (found) {
