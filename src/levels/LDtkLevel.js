@@ -769,6 +769,9 @@ export class LDtkLevel extends Level {
         if (rm.id === 'Level_7') {
             return { x: rm.worldX + 64, y: rm.worldY + 128 };
         }
+        if (rm.id === 'Level_11') {
+            return { x: rm.worldX + 64, y: rm.worldY + 224 };
+        }
         return { x: rm.worldX + 64, y: rm.worldY + 192 };
     }
 
@@ -1441,6 +1444,14 @@ export class LDtkLevel extends Level {
                         // Upper walkway laser -> linked with the gate and puzzle above
                         if (upperBox) { haz.cutoffBoxId = upperBox.id; haz.isCorridorBeam = true; }
                     }
+                } else if (room.id === 'Level_11') {
+                    const lowerBox = roomBoxes.find(bx => (bx.y - room.worldY) > 100);
+                    const exitBox = roomBoxes.find(bx => (bx.y - room.worldY) <= 100);
+                    if (ry > 100) {
+                        if (lowerBox) { haz.cutoffBoxId = lowerBox.id; haz.isCorridorBeam = true; }
+                    } else {
+                        if (exitBox) { haz.cutoffBoxId = exitBox.id; haz.isCorridorBeam = true; }
+                    }
                 }
 
                 // If still not matched, pick closest lightbox in room
@@ -1520,6 +1531,21 @@ export class LDtkLevel extends Level {
         // (12, 2) AND: Inputs Left, Bottom. Output Top.
         if (relGx === 12 && relGy === 2) {
             return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
+        }
+        // Room 11 (Level_11):
+        if (relGx === 0 && relGy === 3) return { inPorts: [PORT.BOTTOM, PORT.RIGHT], outPorts: [PORT.TOP] };
+        if (relGx === 4 && relGy === 1) return { inPorts: [PORT.LEFT, PORT.TOP], outPorts: [PORT.RIGHT] };
+        if (relGx === 6 && relGy === 6) return { inPorts: [PORT.LEFT, PORT.TOP], outPorts: [PORT.BOTTOM] };
+        if (relGx === 19 && relGy === 8) return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
+        if (relGx === 19 && relGy === 6) return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
+        if ((relGx === 10 || relGx === 12 || relGx === 14 || relGx === 16) && relGy === 0) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        if (relGx === 11 && (relGy === 2 || relGy === 4)) {
+            return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.RIGHT] };
+        }
+        if (relGx === 12 && (relGy === 3 || relGy === 5)) {
+            return { inPorts: [PORT.RIGHT, PORT.BOTTOM], outPorts: [PORT.LEFT] };
         }
         return { inPorts: [PORT.LEFT, PORT.BOTTOM], outPorts: [PORT.TOP] };
     }

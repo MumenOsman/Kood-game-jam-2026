@@ -29,7 +29,8 @@ export class LevelSelectScreen {
             { index: 7, title: 'SECTOR 08' },
             { index: 8, title: 'SECTOR 09' },
             { index: 9, title: 'SECTOR 10' },
-            { index: 10, title: 'SECTOR 11' }
+            { index: 10, title: 'SECTOR 11' },
+            { index: 11, title: 'SECTOR 12' }
         ];
     }
 
