@@ -20,7 +20,7 @@ import { TestRoom } from './levels/TestRoom.js?v=20261108_v11';
 import { LDtkLevel } from './levels/LDtkLevel.js?v=20261108_v15';
 import { HUD } from './ui/HUD.js?v=20261108_v15';
 import { AudioManager } from './core/AudioManager.js?v=20261108_v11';
-import { SaveManager } from './core/SaveManager.js?v=20261108_v11';
+import { SaveManager } from './core/SaveManager.js?v=20261108_v12';
 import { UIManager } from './ui/UIManager.js?v=20261108_v13';
 import { CreditFlightScene, FLIGHT_STATE } from './modules/CreditFlightScene.js?v=20261108_v30';
 
@@ -79,6 +79,11 @@ async function bootstrap() {
         : null;
     const levelQuery = urlParams ? urlParams.get('level') : null;
     const roomQuery = urlParams ? urlParams.get('room') : null;
+    const resetQuery = urlParams ? (urlParams.get('reset') === 'true' || urlParams.get('clear') === 'true') : false;
+    if (resetQuery) {
+        saveManager.clearSave();
+        saveManager.clearCompletedLevels();
+    }
 
     let level = null;
     const circuitSystem = new CircuitSystem(eventBus, input, null, { assetLoader });
@@ -228,7 +233,8 @@ async function bootstrap() {
             player.vy = 0;
             player.battery = player.maxBattery || 100;
             camera.snapTo(player.x, player.y);
-            saveCurrentProgress();
+            saveManager.clearSave();
+            lastSavedRoomIndex = 0;
         },
         onLoadGame: (saveData) => {
             wireSystem.disconnectWire();
@@ -318,7 +324,8 @@ async function bootstrap() {
             player.shockInvulnTimer = 0;
             player.respawnBlinkTimer = 1.2;
             camera.snapTo(player.x, player.y);
-            saveCurrentProgress();
+            saveManager.clearSave();
+            lastSavedRoomIndex = 0;
             if (audioManager) {
                 audioManager.resetVisitedRooms();
                 audioManager.playFx('player_respawn', 0.85);
@@ -328,7 +335,11 @@ async function bootstrap() {
         },
         onExitToMenu: () => {
             if (!isGameCompleted) {
-                saveCurrentProgress();
+                if (level && level.activeRoomIndex > 0) {
+                    saveCurrentProgress();
+                } else {
+                    saveManager.clearSave();
+                }
             }
             wireSystem.disconnectWire();
             if (creditFlightScene) {

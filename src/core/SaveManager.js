@@ -5,8 +5,14 @@
  */
 export class SaveManager {
     constructor() {
-        this.STORAGE_KEY = 'tether_save_slot_0';
-        this.COMPLETED_KEY = 'tether_completed_levels';
+        this.STORAGE_KEY = 'tether_save_v1';
+        this.COMPLETED_KEY = 'tether_completed_v1';
+
+        // Proactively purge legacy pre-release save slots so game starts completely fresh
+        try {
+            localStorage.removeItem('tether_save_slot_0');
+            localStorage.removeItem('tether_completed_levels');
+        } catch (e) {}
     }
 
     hasSave() {
@@ -14,7 +20,8 @@ export class SaveManager {
             const raw = localStorage.getItem(this.STORAGE_KEY);
             if (!raw) return false;
             const data = JSON.parse(raw);
-            return data && typeof data.roomIndex === 'number' && data.checkpoint && typeof data.checkpoint.x === 'number';
+            // Require player to have actually progressed past Sector 1 (roomIndex > 0)
+            return !!(data && typeof data.roomIndex === 'number' && data.roomIndex > 0 && data.checkpoint && typeof data.checkpoint.x === 'number');
         } catch (e) {
             return false;
         }
