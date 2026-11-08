@@ -17,3 +17,13 @@ __pycache__/
 *.zip
 !TetherMind.zip
 
+# Agent & AI Assistant Configuration
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.agent/
+skills/
+.skills/
+*.skill
+
